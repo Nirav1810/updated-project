@@ -8,6 +8,8 @@ import userRoutes from './src/routes/userRoutes.js';
 import classRoutes from './src/routes/classRoutes.js';
 import scheduleRoutes from './src/routes/scheduleRoutes.js';
 import attendanceRoutes from './src/routes/attendanceRoutes.js';
+import timeSlotRoutes from './src/routes/timeSlotRoutes.js';
+import roomRoutes from './src/routes/roomRoutes.js';
 // Note: You can create and import routes for other models like ClassEnrollment, etc.
 
 // Load environment variables
@@ -37,12 +39,16 @@ app.use('/api/users', userRoutes);
 app.use('/api/classes', classRoutes);
 app.use('/api/schedules', scheduleRoutes);
 app.use('/api/attendance', attendanceRoutes);
+app.use('/api/timeslots', timeSlotRoutes);
+app.use('/api/rooms', roomRoutes);
 
 console.log('Routes registered:');
 console.log('- /api/users');
 console.log('- /api/classes');
 console.log('- /api/schedules');
 console.log('- /api/attendance');
+console.log('- /api/timeslots');
+console.log('- /api/rooms');
 
 const PORT = process.env.PORT || 5001;
 

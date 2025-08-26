@@ -2,6 +2,9 @@ import React, { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from 'react-query';
 import { classService } from '../../services/classService';
+import { useModal } from '../../hooks/useModal';
+import AlertModal from '../../components/common/AlertModal';
+import ConfirmModal from '../../components/common/ConfirmModal';
 
 const ClassStudents = () => {
   const { id } = useParams();
@@ -12,6 +15,7 @@ const ClassStudents = () => {
     email: ''
   });
   const queryClient = useQueryClient();
+  const { alertModal, confirmModal, showAlert, showConfirm, closeAlert, closeConfirm } = useModal();
 
   // Fetch class details
   const { data: classData, isLoading: classLoading } = useQuery(
@@ -50,23 +54,32 @@ const ClassStudents = () => {
   const handleAddStudent = (e) => {
     e.preventDefault();
     if (!newStudent.name || !newStudent.enrollmentNo || !newStudent.email) {
-      alert('All fields are required');
+      showAlert('All fields are required', 'warning');
       return;
     }
     
     // Here you would call the API to add the student
     console.log('Adding student:', newStudent);
-    alert('Student added successfully! (Demo)');
+    showAlert('Student added successfully! (Demo)', 'success');
     setNewStudent({ name: '', enrollmentNo: '', email: '' });
     setShowAddStudent(false);
   };
 
   const handleRemoveStudent = (studentId) => {
-    if (window.confirm('Are you sure you want to remove this student?')) {
-      // Here you would call the API to remove the student
-      console.log('Removing student:', studentId);
-      alert('Student removed successfully! (Demo)');
-    }
+    showConfirm(
+      'Are you sure you want to remove this student?',
+      () => {
+        // Here you would call the API to remove the student
+        console.log('Removing student:', studentId);
+        showAlert('Student removed successfully! (Demo)', 'success');
+      },
+      {
+        title: 'Remove Student',
+        type: 'danger',
+        confirmText: 'Remove',
+        cancelText: 'Cancel'
+      }
+    );
   };
 
   if (classLoading) {
@@ -254,7 +267,7 @@ const ClassStudents = () => {
                     </div>
                     <div className="flex space-x-2">
                       <button
-                        onClick={() => alert(`Viewing details for ${student.name} (Demo)`)}
+                        onClick={() => showAlert(`Viewing details for ${student.name} (Demo)`, 'info', 'Student Details')}
                         className="text-blue-600 hover:text-blue-500 text-sm font-medium"
                       >
                         View Details
@@ -289,6 +302,26 @@ const ClassStudents = () => {
           </div>
         )}
       </div>
+      {/* Custom Alert Modal */}
+      <AlertModal
+        isOpen={alertModal.isOpen}
+        onClose={closeAlert}
+        title={alertModal.title}
+        message={alertModal.message}
+        type={alertModal.type}
+      />
+
+      {/* Custom Confirm Modal */}
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        onClose={closeConfirm}
+        onConfirm={confirmModal.onConfirm}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        type={confirmModal.type}
+        confirmText={confirmModal.confirmText}
+        cancelText={confirmModal.cancelText}
+      />
     </div>
   );
 };

@@ -32,7 +32,45 @@ const CreateClassModal = ({ onClose, onSuccess }) => {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    setFormData(prev => {
+      const newFormData = { ...prev, [name]: value };
+      
+      // Reset semester when year changes
+      if (name === 'classYear') {
+        newFormData.semester = '';
+      }
+      
+      return newFormData;
+    });
+  };
+
+  // Get available semesters based on selected year
+  const getAvailableSemesters = () => {
+    const year = parseInt(formData.classYear);
+    switch (year) {
+      case 1:
+        return [
+          { value: '1', label: 'Semester 1' },
+          { value: '2', label: 'Semester 2' }
+        ];
+      case 2:
+        return [
+          { value: '3', label: 'Semester 3' },
+          { value: '4', label: 'Semester 4' }
+        ];
+      case 3:
+        return [
+          { value: '5', label: 'Semester 5' },
+          { value: '6', label: 'Semester 6' }
+        ];
+      case 4:
+        return [
+          { value: '7', label: 'Semester 7' },
+          { value: '8', label: 'Semester 8' }
+        ];
+      default:
+        return [];
+    }
   };
 
   const handleSubmit = (e) => {
@@ -131,12 +169,21 @@ const CreateClassModal = ({ onClose, onSuccess }) => {
                   onChange={handleChange}
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
                   required
+                  disabled={!formData.classYear}
                 >
-                  <option value="">Select Semester</option>
-                  <option value="1">Semester 1</option>
-                  <option value="2">Semester 2</option>
+                  <option value="">
+                    {!formData.classYear ? 'Select Year First' : 'Select Semester'}
+                  </option>
+                  {getAvailableSemesters().map(semester => (
+                    <option key={semester.value} value={semester.value}>
+                      {semester.label}
+                    </option>
+                  ))}
                 </select>
                 {errors.semester && <p className="mt-1 text-sm text-red-600">{errors.semester}</p>}
+                {formData.classYear && getAvailableSemesters().length === 0 && (
+                  <p className="mt-1 text-sm text-gray-500">No semesters available for selected year</p>
+                )}
               </div>
               <div>
                 <label className="block text-gray-700 text-sm font-medium mb-1" htmlFor="division">

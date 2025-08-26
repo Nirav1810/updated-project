@@ -1,10 +1,17 @@
 import React from 'react';
-import { useParams, Link } from 'react-router-dom';
-import { useQuery } from 'react-query';
+import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useQuery, useMutation, useQueryClient } from 'react-query';
 import { classService } from '../../services/classService';
+import { toast } from 'react-hot-toast';
+import { useModal } from '../../hooks/useModal';
+import AlertModal from '../../components/common/AlertModal';
+import ConfirmModal from '../../components/common/ConfirmModal';
 
 const ClassDetails = () => {
   const { id } = useParams();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const { alertModal, confirmModal, showAlert, showConfirm, closeAlert, closeConfirm } = useModal();
   
   const { data: classData, isLoading, error } = useQuery(
     ['class', id],
@@ -13,6 +20,33 @@ const ClassDetails = () => {
       enabled: !!id
     }
   );
+
+  const deleteClassMutation = useMutation({
+    mutationFn: classService.deleteClass,
+    onSuccess: (data) => {
+      toast.success(`Class "${data.deletedClass.subjectCode}" deleted successfully!`);
+      queryClient.invalidateQueries('classes');
+      navigate('/classes');
+    },
+    onError: (error) => {
+      toast.error(error.response?.data?.message || 'Failed to delete class');
+    }
+  });
+
+  const handleDelete = () => {
+    if (classData) {
+      showConfirm(
+        `Are you sure you want to delete "${classData.subjectCode} - ${classData.subjectName}"? This will also delete all associated schedules and attendance records. This action cannot be undone.`,
+        () => deleteClassMutation.mutate(id),
+        {
+          title: 'Delete Class',
+          type: 'danger',
+          confirmText: 'Delete',
+          cancelText: 'Cancel'
+        }
+      );
+    }
+  };
 
   if (isLoading) return (
     <div className="p-6">
@@ -90,7 +124,7 @@ const ClassDetails = () => {
       </div>
 
       {/* Action Buttons */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
         <Link
           to={`/attendance?classId=${id}`}
           className="bg-blue-500 hover:bg-blue-600 text-white font-medium py-3 px-4 rounded-lg text-center transition-colors"
@@ -109,6 +143,13 @@ const ClassDetails = () => {
         >
           View Reports
         </Link>
+        <button
+          onClick={handleDelete}
+          disabled={deleteClassMutation.isLoading}
+          className="bg-red-500 hover:bg-red-600 text-white font-medium py-3 px-4 rounded-lg text-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {deleteClassMutation.isLoading ? 'Deleting...' : 'Delete Class'}
+        </button>
       </div>
 
       {/* Recent Activity */}
@@ -119,6 +160,27 @@ const ClassDetails = () => {
           <p className="text-sm mt-2">Start taking attendance to see activity here.</p>
         </div>
       </div>
+
+      {/* Custom Alert Modal */}
+      <AlertModal
+        isOpen={alertModal.isOpen}
+        onClose={closeAlert}
+        title={alertModal.title}
+        message={alertModal.message}
+        type={alertModal.type}
+      />
+
+      {/* Custom Confirm Modal */}
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        onClose={closeConfirm}
+        onConfirm={confirmModal.onConfirm}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        type={confirmModal.type}
+        confirmText={confirmModal.confirmText}
+        cancelText={confirmModal.cancelText}
+      />
     </div>
   );
 };

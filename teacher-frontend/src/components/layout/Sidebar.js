@@ -5,7 +5,8 @@ import {
   AcademicCapIcon, 
   CalendarIcon, 
   ClockIcon, 
-  UserIcon 
+  UserIcon,
+  CogIcon
 } from '@heroicons/react/24/outline';
 
 const Sidebar = () => {
@@ -14,6 +15,7 @@ const Sidebar = () => {
     { name: 'Classes', icon: AcademicCapIcon, path: '/classes' },
     { name: 'Attendance', icon: ClockIcon, path: '/attendance' },
     { name: 'Schedule', icon: CalendarIcon, path: '/schedule' },
+    { name: 'Settings', icon: CogIcon, path: '/settings' },
     { name: 'Profile', icon: UserIcon, path: '/profile' },
   ];
 

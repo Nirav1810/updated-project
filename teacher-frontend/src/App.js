@@ -12,6 +12,7 @@ import ClassStudents from './pages/Classes/ClassStudents';
 import ClassReports from './pages/Classes/ClassReports';
 import AttendancePage from './pages/Attendance';
 import SchedulePage from './pages/Schedule';
+import SettingsPage from './pages/Settings';
 import ProfilePage from './pages/Profile';
 import LoginPage from './pages/Login';
 import RegisterPage from './pages/Register';
@@ -38,6 +39,7 @@ function App() {
               <Route path="classes/:id/reports" element={<ClassReports />} />
               <Route path="attendance" element={<AttendancePage />} />
               <Route path="schedule" element={<SchedulePage />} />
+              <Route path="settings" element={<SettingsPage />} />
               <Route path="profile" element={<ProfilePage />} />
             </Route>
           </Routes>

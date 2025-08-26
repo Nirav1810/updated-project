@@ -8,7 +8,9 @@ import {
   getTeacherSchedule,
   getTodaySchedule,
   createBulkSchedules,
-  checkScheduleConflict
+  checkScheduleConflict,
+  mergeSchedules,
+  splitSchedule
 } from '../controllers/scheduleController.js';
 import { protect, teacher } from '../middleware/authMiddleware.js';
 
@@ -22,6 +24,8 @@ router.route('/weekly').get(teacher, getTeacherSchedule);
 router.route('/today').get(teacher, getTodaySchedule);
 router.route('/bulk').post(teacher, createBulkSchedules);
 router.route('/check-conflict').post(teacher, checkScheduleConflict);
+router.route('/merge').post(teacher, mergeSchedules);
+router.route('/split/:scheduleId').post(teacher, splitSchedule);
 
 // CRUD routes
 router.route('/').post(teacher, createSchedule).get(teacher, getAllSchedules);

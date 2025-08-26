@@ -68,4 +68,15 @@ export const scheduleService = {
   getBreakTimeSlots: () => {
     return scheduleService.getTimeSlots().filter(slot => slot.type === 'break');
   },
+
+  // Merge and split operations
+  mergeSchedules: (sourceScheduleId, targetScheduleId, customLabel) => 
+    api.post('/api/schedules/merge', { 
+      sourceScheduleId, 
+      targetScheduleId, 
+      customLabel 
+    }),
+
+  splitSchedule: (scheduleId) => 
+    api.post(`/api/schedules/split/${scheduleId}`),
 };

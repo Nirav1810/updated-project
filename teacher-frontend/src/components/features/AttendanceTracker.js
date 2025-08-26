@@ -1,19 +1,23 @@
 import React, { useState } from 'react';
 import { useMutation } from 'react-query';
 import { attendanceService } from '../../services/attendanceService';
+import { useModal } from '../../hooks/useModal';
+import AlertModal from '../common/AlertModal';
+import ConfirmModal from '../common/ConfirmModal';
 
 const AttendanceTracker = ({ classId }) => {
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
   const [attendanceData, setAttendanceData] = useState([]);
+  const { alertModal, confirmModal, showAlert, showConfirm, closeAlert, closeConfirm } = useModal();
   
   const { mutate: markAttendance, isLoading } = useMutation(
     attendanceService.markAttendance,
     {
       onSuccess: () => {
-        alert('Attendance marked successfully!');
+        showAlert('Attendance marked successfully!', 'success');
       },
       onError: (error) => {
-        alert(`Error: ${error.response.data.message}`);
+        showAlert(`Error: ${error.response.data.message}`, 'error');
       }
     }
   );
@@ -80,6 +84,27 @@ const AttendanceTracker = ({ classId }) => {
       >
         {isLoading ? 'Submitting...' : 'Submit Attendance'}
       </button>
+
+      {/* Custom Alert Modal */}
+      <AlertModal
+        isOpen={alertModal.isOpen}
+        onClose={closeAlert}
+        title={alertModal.title}
+        message={alertModal.message}
+        type={alertModal.type}
+      />
+
+      {/* Custom Confirm Modal */}
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        onClose={closeConfirm}
+        onConfirm={confirmModal.onConfirm}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        type={confirmModal.type}
+        confirmText={confirmModal.confirmText}
+        cancelText={confirmModal.cancelText}
+      />
     </div>
   );
 };
