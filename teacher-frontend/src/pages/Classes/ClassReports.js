@@ -25,7 +25,13 @@ const ClassReports = () => {
     ['classStudents', id],
     () => classService.getClassStudents(id),
     {
-      enabled: !!id
+      enabled: !!id,
+      onSuccess: (data) => {
+        console.log('Students data received:', data);
+      },
+      onError: (error) => {
+        console.error('Error fetching students:', error);
+      }
     }
   );
 
@@ -34,7 +40,13 @@ const ClassReports = () => {
     ['classAttendance', id, selectedPeriod, dateRange],
     () => attendanceService.getAttendanceByClass(id),
     {
-      enabled: !!id
+      enabled: !!id,
+      onSuccess: (data) => {
+        console.log('Attendance data received:', data);
+      },
+      onError: (error) => {
+        console.error('Error fetching attendance:', error);
+      }
     }
   );
 
@@ -53,8 +65,8 @@ const ClassReports = () => {
       };
     }
 
-    const students = studentsData.students || [];
-    const attendance = attendanceData.data || attendanceData || [];
+    const students = studentsData?.data || studentsData?.students || [];
+    const attendance = attendanceData?.data || attendanceData || [];
 
     // Group attendance by date to count total classes
     const classesByDate = {};
@@ -77,10 +89,9 @@ const ClassReports = () => {
         };
       }
 
-      if (record.status === 'present') {
-        studentAttendance[studentId].present++;
-        studentAttendance[studentId].lastAttended = record.timestamp;
-      }
+      // If attendance record exists, student was present
+      studentAttendance[studentId].present++;
+      studentAttendance[studentId].lastAttended = record.timestamp;
       studentAttendance[studentId].total++;
     });
 
@@ -136,6 +147,10 @@ const ClassReports = () => {
   };
 
   const stats = calculateAttendanceStats();
+  
+  console.log('Calculated stats:', stats);
+  console.log('Students data:', studentsData);
+  console.log('Attendance data:', attendanceData);
 
   const getAttendanceColor = (rate) => {
     if (rate >= 85) return 'text-green-600 bg-green-100';

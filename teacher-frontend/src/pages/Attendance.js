@@ -5,19 +5,31 @@ import { classService } from '../services/classService';
 import { attendanceService } from '../services/attendanceService';
 import QRCode from 'react-qr-code';
 import { toast } from 'react-hot-toast';
+import { useModal } from '../hooks/useModal';
+import AlertModal from '../components/common/AlertModal';
+import ConfirmModal from '../components/common/ConfirmModal';
 
 const Attendance = () => {
+  const [activeTab, setActiveTab] = useState('qr'); // 'qr' or 'manual'
   const [selectedClass, setSelectedClass] = useState('');
   const [qrDuration, setQrDuration] = useState(10);
   const [activeSession, setActiveSession] = useState(null);
   const [currentQRData, setCurrentQRData] = useState(null);
   const [tokenCountdown, setTokenCountdown] = useState(15);
   const [sessionCountdown, setSessionCountdown] = useState(0);
+  
+  // Manual attendance states
+  const [manualSelectedClass, setManualSelectedClass] = useState('');
+  const [selectedStudents, setSelectedStudents] = useState([]);
+  const [manualNotes, setManualNotes] = useState('');
+  const [showDebugView, setShowDebugView] = useState(false);
+  
   const queryClient = useQueryClient();
   const location = useLocation();
   const tokenRefreshInterval = useRef(null);
   const tokenCountdownInterval = useRef(null);
   const sessionCountdownInterval = useRef(null);
+  const { alertModal, confirmModal, showAlert, showConfirm, closeAlert, closeConfirm } = useModal();
 
   // Extract classId from URL parameters
   useEffect(() => {
@@ -165,6 +177,46 @@ const Attendance = () => {
     classService.getClasses
   );
 
+  // Fetch students for selected class (for manual attendance)
+  const { data: studentsData, isLoading: studentsLoading } = useQuery(
+    ['students', manualSelectedClass],
+    () => attendanceService.getStudentsForClass(manualSelectedClass),
+    {
+      enabled: !!manualSelectedClass && activeTab === 'manual',
+      onError: (error) => {
+        console.error('Error fetching students:', error);
+        showAlert('Failed to fetch students for this class', 'error');
+      }
+    }
+  );
+
+  // Fetch all students (for debugging)
+  const { data: allStudentsData, isLoading: allStudentsLoading } = useQuery(
+    'all-students',
+    attendanceService.getAllStudents,
+    {
+      enabled: showDebugView && activeTab === 'manual'
+    }
+  );
+
+  // Bulk enroll mutation
+  const bulkEnrollMutation = useMutation(
+    ({ classId, studentEmails }) => attendanceService.bulkEnrollStudents(classId, studentEmails),
+    {
+      onSuccess: (data) => {
+        console.log('Bulk enrollment successful:', data);
+        showAlert(`Successfully enrolled ${data.data.successCount} students!`, 'success');
+        queryClient.invalidateQueries(['students', manualSelectedClass]);
+        setShowDebugView(false);
+      },
+      onError: (error) => {
+        console.error('Error with bulk enrollment:', error);
+        const errorMessage = error?.response?.data?.message || 'Failed to enroll students';
+        showAlert(`Error: ${errorMessage}`, 'error');
+      }
+    }
+  );
+
   // Fetch active QR sessions
   const { data: activeSessionsData } = useQuery(
     'activeQRSessions',
@@ -239,19 +291,38 @@ const Attendance = () => {
         setCurrentQRData(null);
         stopAllTimers();
         queryClient.invalidateQueries('activeQRSessions');
-        toast.success('All QR sessions cleared');
+        showAlert('All QR sessions cleared', 'success');
       },
       onError: (error) => {
         console.error('Error terminating all QR sessions:', error);
         const errorMessage = error?.response?.data?.message || 'Failed to terminate all QR sessions';
-        toast.error(`Error: ${errorMessage}`);
+        showAlert(`Error: ${errorMessage}`, 'error');
+      }
+    }
+  );
+
+  // Manual Attendance mutation
+  const manualAttendanceMutation = useMutation(
+    attendanceService.markManualAttendance,
+    {
+      onSuccess: (data) => {
+        console.log('Manual attendance marked successfully:', data);
+        showAlert('Manual attendance marked successfully!', 'success');
+        setSelectedStudents([]);
+        setManualNotes('');
+        queryClient.invalidateQueries(['students', manualSelectedClass]);
+      },
+      onError: (error) => {
+        console.error('Error marking manual attendance:', error);
+        const errorMessage = error?.response?.data?.message || 'Failed to mark manual attendance';
+        showAlert(`Error: ${errorMessage}`, 'error');
       }
     }
   );
 
   const handleGenerateQR = () => {
     if (!selectedClass) {
-      toast.error('Please select a class first');
+      showAlert('Please select a class first', 'warning');
       return;
     }
     generateQRMutation.mutate({ classId: selectedClass, duration: qrDuration });
@@ -262,8 +333,67 @@ const Attendance = () => {
       console.log('Terminating session with ID:', activeSession.sessionId);
       terminateQRMutation.mutate(activeSession.sessionId);
     } else {
-      toast.error('No active session to terminate');
+      showAlert('No active session to terminate', 'warning');
     }
+  };
+
+  const handleTerminateAll = () => {
+    showConfirm(
+      'Are you sure you want to terminate all active QR sessions? This action cannot be undone.',
+      () => terminateAllMutation.mutate(),
+      {
+        title: 'Terminate All Sessions',
+        type: 'danger',
+        confirmText: 'Terminate All',
+        cancelText: 'Cancel'
+      }
+    );
+  };
+
+  const handleManualAttendance = () => {
+    console.log('handleManualAttendance function called!');
+    console.log('manualSelectedClass:', manualSelectedClass);
+    console.log('selectedStudents:', selectedStudents);
+    
+    if (!manualSelectedClass) {
+      console.log('No class selected, showing alert');
+      showAlert('Please select a class first', 'warning');
+      return;
+    }
+    if (selectedStudents.length === 0) {
+      console.log('No students selected, showing alert');
+      showAlert('Please select at least one student', 'warning');
+      return;
+    }
+
+    const studentCount = selectedStudents.length;
+    const studentText = studentCount === 1 ? 'student' : 'students';
+    
+    console.log('Manual attendance data:', {
+      studentIds: selectedStudents,
+      classId: manualSelectedClass,
+      notes: manualNotes || 'Manual attendance entry by teacher'
+    });
+    
+    console.log('About to show confirmation modal');
+    showConfirm(
+      `Mark attendance for ${studentCount} ${studentText}?`,
+      () => {
+        console.log('Confirmation accepted, calling mutation');
+        manualAttendanceMutation.mutate({
+          studentIds: selectedStudents,
+          classId: manualSelectedClass,
+          notes: manualNotes || 'Manual attendance entry by teacher'
+        });
+      },
+      {
+        title: 'Mark Manual Attendance',
+        type: 'warning',
+        confirmText: `Mark ${studentCount} ${studentText} Present`,
+        cancelText: 'Cancel'
+      }
+    );
+    console.log('showConfirm called');
   };
 
   const formatTime = (seconds) => {
@@ -279,55 +409,95 @@ const Attendance = () => {
     <div className="p-6">
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900 mb-2">Attendance Management</h1>
-        <p className="text-gray-600">Generate secure dynamic QR codes for attendance (refreshes every 15 seconds)</p>
+        <p className="text-gray-600">Manage attendance with QR codes or manual entry</p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* QR Code Generation Panel */}
-        <div className="bg-white rounded-lg shadow-md p-6">
-          <h2 className="text-xl font-semibold text-gray-900 mb-4">Generate QR Code</h2>
-          
-          {/* Class Selection */}
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Select Class
-            </label>
-            <select
-              value={selectedClass}
-              onChange={(e) => setSelectedClass(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              disabled={!!activeSession}
+      {/* Tab Navigation */}
+      <div className="mb-8">
+        <div className="border-b border-gray-200">
+          <nav className="-mb-px flex space-x-8" aria-label="Tabs">
+            <button
+              onClick={() => setActiveTab('qr')}
+              className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'qr'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
             >
-              <option value="">Choose a class...</option>
-              {classesLoading ? (
-                <option disabled>Loading classes...</option>
-              ) : (
-                classesArray.map((classItem) => (
-                  <option key={classItem._id} value={classItem._id}>
-                    {classItem.subjectCode} - {classItem.subjectName} (Year {classItem.classYear})
-                  </option>
-                ))
-              )}
-            </select>
-          </div>
+              <div className="flex items-center">
+                <svg className="mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h4" />
+                </svg>
+                QR Code Attendance
+              </div>
+            </button>
+            <button
+              onClick={() => setActiveTab('manual')}
+              className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'manual'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              <div className="flex items-center">
+                <svg className="mr-2 h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                Manual Attendance
+              </div>
+            </button>
+          </nav>
+        </div>
+      </div>
 
-          {/* Duration Selection */}
-          <div className="mb-6">
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Session Duration (minutes)
-            </label>
-            <select
-              value={qrDuration}
-              onChange={(e) => setQrDuration(Number(e.target.value))}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              disabled={!!activeSession}
-            >
-              <option value={5}>5 minutes</option>
-              <option value={10}>10 minutes</option>
-              <option value={15}>15 minutes</option>
-              <option value={30}>30 minutes</option>
-            </select>
-          </div>
+      {/* QR Code Tab Content */}
+      {activeTab === 'qr' && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          {/* QR Code Generation Panel */}
+          <div className="bg-white rounded-lg shadow-md p-6">
+            <h2 className="text-xl font-semibold text-gray-900 mb-4">Generate QR Code</h2>
+            
+            {/* Class Selection */}
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Select Class
+              </label>
+              <select
+                value={selectedClass}
+                onChange={(e) => setSelectedClass(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                disabled={!!activeSession}
+              >
+                <option value="">Choose a class...</option>
+                {classesLoading ? (
+                  <option disabled>Loading classes...</option>
+                ) : (
+                  classesArray.map((classItem) => (
+                    <option key={classItem._id} value={classItem._id}>
+                      {classItem.subjectCode} - {classItem.subjectName} (Year {classItem.classYear})
+                    </option>
+                  ))
+                )}
+              </select>
+            </div>
+
+            {/* Duration Selection */}
+            <div className="mb-6">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Session Duration (minutes)
+              </label>
+              <select
+                value={qrDuration}
+                onChange={(e) => setQrDuration(Number(e.target.value))}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                disabled={!!activeSession}
+              >
+                <option value={5}>5 minutes</option>
+                <option value={10}>10 minutes</option>
+                <option value={15}>15 minutes</option>
+                <option value={30}>30 minutes</option>
+              </select>
+            </div>
 
           {/* Action Buttons */}
           <div className="space-y-3">
@@ -462,29 +632,272 @@ const Attendance = () => {
             </div>
           )}
         </div>
-      </div>
 
-      {/* Dynamic QR Info */}
-      <div className="mt-8 bg-white rounded-lg shadow-md p-6">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">How Dynamic QR Works</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="text-center p-4 bg-blue-50 rounded-lg">
-            <div className="text-blue-600 mb-2">🔄</div>
-            <h3 className="font-medium text-blue-900">Continuous Refresh</h3>
-            <p className="text-sm text-blue-700">QR code updates every 15 seconds until session ends</p>
-          </div>
-          <div className="text-center p-4 bg-green-50 rounded-lg">
-            <div className="text-green-600 mb-2">🛡️</div>
-            <h3 className="font-medium text-green-900">Proxy Prevention</h3>
-            <p className="text-sm text-green-700">Photos become invalid quickly, preventing sharing</p>
-          </div>
-          <div className="text-center p-4 bg-purple-50 rounded-lg">
-            <div className="text-purple-600 mb-2">✅</div>
-            <h3 className="font-medium text-purple-900">Session-Based</h3>
-            <p className="text-sm text-purple-700">Each session has unique ID and rotating tokens</p>
+        {/* Dynamic QR Info */}
+        <div className="mt-8 bg-white rounded-lg shadow-md p-6">
+          <h2 className="text-xl font-semibold text-gray-900 mb-4">How Dynamic QR Works</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="text-center p-4 bg-blue-50 rounded-lg">
+              <div className="text-blue-600 mb-2">🔄</div>
+              <h3 className="font-medium text-blue-900">Continuous Refresh</h3>
+              <p className="text-sm text-blue-700">QR code updates every 15 seconds until session ends</p>
+            </div>
+            <div className="text-center p-4 bg-green-50 rounded-lg">
+              <div className="text-green-600 mb-2">🛡️</div>
+              <h3 className="font-medium text-green-900">Proxy Prevention</h3>
+              <p className="text-sm text-green-700">Photos become invalid quickly, preventing sharing</p>
+            </div>
+            <div className="text-center p-4 bg-purple-50 rounded-lg">
+              <div className="text-purple-600 mb-2">✅</div>
+              <h3 className="font-medium text-purple-900">Session-Based</h3>
+              <p className="text-sm text-purple-700">Each session has unique ID and rotating tokens</p>
+            </div>
           </div>
         </div>
       </div>
+      )}
+
+      {/* Manual Attendance Tab Content */}
+      {activeTab === 'manual' && (
+        <div className="bg-white rounded-lg shadow-md p-6">
+          <h2 className="text-xl font-semibold text-gray-900 mb-4">Manual Attendance Entry</h2>
+          <p className="text-gray-600 mb-6">Mark attendance manually when QR system is not available</p>
+
+          {/* Class Selection for Manual */}
+          <div className="mb-6">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Select Class
+            </label>
+            <select
+              value={manualSelectedClass}
+              onChange={(e) => setManualSelectedClass(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="">Choose a class...</option>
+              {classesLoading ? (
+                <option disabled>Loading classes...</option>
+              ) : (
+                classesArray.map((classItem) => (
+                  <option key={classItem._id} value={classItem._id}>
+                    {classItem.subjectCode} - {classItem.subjectName} (Year {classItem.classYear})
+                  </option>
+                ))
+              )}
+            </select>
+          </div>
+
+          {/* Debug Helper */}
+          {manualSelectedClass && (
+            <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="font-medium text-yellow-900">Student Enrollment Helper</h4>
+                <button
+                  onClick={() => setShowDebugView(!showDebugView)}
+                  className="text-sm bg-yellow-600 text-white px-3 py-1 rounded hover:bg-yellow-700"
+                >
+                  {showDebugView ? 'Hide' : 'Show'} All Students
+                </button>
+              </div>
+              
+              {showDebugView && (
+                <div className="space-y-3">
+                  <p className="text-sm text-yellow-800">
+                    If you don't see students below, they might not be enrolled in this class yet. 
+                    Here are all students in the system:
+                  </p>
+                  
+                  {allStudentsLoading ? (
+                    <div className="text-sm text-yellow-700">Loading all students...</div>
+                  ) : allStudentsData?.data && allStudentsData.data.length > 0 ? (
+                    <div className="space-y-2">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-40 overflow-y-auto border rounded p-2 bg-white">
+                        {allStudentsData.data.map((student) => (
+                          <div key={student._id} className="text-xs p-2 border rounded bg-gray-50">
+                            <div className="font-medium">{student.name || student.fullName}</div>
+                            <div className="text-gray-600">{student.email}</div>
+                            {student.enrollmentNo && (
+                              <div className="text-gray-500">ID: {student.enrollmentNo}</div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                      
+                      <button
+                        onClick={() => {
+                          const emails = allStudentsData.data.map(student => student.email);
+                          bulkEnrollMutation.mutate({
+                            classId: manualSelectedClass,
+                            studentEmails: emails
+                          });
+                        }}
+                        disabled={bulkEnrollMutation.isLoading}
+                        className="w-full bg-yellow-600 text-white py-2 px-4 rounded hover:bg-yellow-700 disabled:opacity-50 text-sm"
+                      >
+                        {bulkEnrollMutation.isLoading 
+                          ? 'Enrolling...' 
+                          : `Enroll All ${allStudentsData.data.length} Students in This Class`}
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="text-sm text-yellow-700">No students found in the system</div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Students Selection */}
+          {manualSelectedClass && !studentsLoading && (
+            <div className="mb-6">
+              <h3 className="text-lg font-medium text-gray-900 mb-4">Select Students to Mark Present</h3>
+              
+              {studentsData?.data && studentsData.data.length > 0 ? (
+                <div className="space-y-3 max-h-96 overflow-y-auto border border-gray-200 rounded-lg p-4">
+                  {/* Select All Checkbox */}
+                  <div className="flex items-center pb-3 border-b border-gray-200">
+                    <input
+                      type="checkbox"
+                      id="select-all"
+                      checked={selectedStudents.length === studentsData.data.length}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedStudents(studentsData.data.map(student => student._id));
+                        } else {
+                          setSelectedStudents([]);
+                        }
+                      }}
+                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                    />
+                    <label htmlFor="select-all" className="ml-2 text-sm font-medium text-gray-900">
+                      Select All Students ({studentsData.data.length})
+                    </label>
+                  </div>
+
+                  {/* Individual Student Checkboxes */}
+                  {studentsData.data.map((student) => (
+                    <div key={student._id} className="flex items-center">
+                      <input
+                        type="checkbox"
+                        id={`student-${student._id}`}
+                        checked={selectedStudents.includes(student._id)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedStudents([...selectedStudents, student._id]);
+                          } else {
+                            setSelectedStudents(selectedStudents.filter(id => id !== student._id));
+                          }
+                        }}
+                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                      />
+                      <label htmlFor={`student-${student._id}`} className="ml-2 text-sm text-gray-700">
+                        {student.name} - {student.enrollmentNo || student.rollNumber}
+                      </label>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8 text-gray-500">
+                  {studentsLoading ? 'Loading students...' : 'No students enrolled in this class'}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Notes Field */}
+          {manualSelectedClass && (
+            <div className="mb-6">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Notes (Optional)
+              </label>
+              <textarea
+                value={manualNotes}
+                onChange={(e) => setManualNotes(e.target.value)}
+                placeholder="Add any notes about this manual attendance entry..."
+                rows={3}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          )}
+
+          {/* Submit Button */}
+          {manualSelectedClass && selectedStudents.length > 0 && (
+            <div className="flex justify-end">
+              <button
+                onClick={handleManualAttendance}
+                disabled={manualAttendanceMutation.isLoading}
+                className="bg-blue-600 text-white py-2 px-6 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {manualAttendanceMutation.isLoading 
+                  ? 'Marking Attendance...' 
+                  : `Mark ${selectedStudents.length} Student${selectedStudents.length !== 1 ? 's' : ''} Present`}
+              </button>
+            </div>
+          )}
+
+          {/* Manual Attendance Info */}
+          <div className="mt-8 bg-gray-50 rounded-lg p-6">
+            <h3 className="text-lg font-medium text-gray-900 mb-3">Manual Attendance Guidelines</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <div className="flex items-start">
+                  <div className="text-blue-600 mr-2">📝</div>
+                  <div>
+                    <h4 className="font-medium text-gray-900">When to Use</h4>
+                    <p className="text-sm text-gray-600">Use when QR system is unavailable or technical issues occur</p>
+                  </div>
+                </div>
+                <div className="flex items-start">
+                  <div className="text-green-600 mr-2">✅</div>
+                  <div>
+                    <h4 className="font-medium text-gray-900">Verification</h4>
+                    <p className="text-sm text-gray-600">Verify student presence before marking attendance</p>
+                  </div>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <div className="flex items-start">
+                  <div className="text-orange-600 mr-2">📋</div>
+                  <div>
+                    <h4 className="font-medium text-gray-900">Record Keeping</h4>
+                    <p className="text-sm text-gray-600">Manual entries are logged with timestamps and notes</p>
+                  </div>
+                </div>
+                <div className="flex items-start">
+                  <div className="text-purple-600 mr-2">🔒</div>
+                  <div>
+                    <h4 className="font-medium text-gray-900">Security</h4>
+                    <p className="text-sm text-gray-600">All manual entries are audited and traceable</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Modals */}
+      <AlertModal 
+        isOpen={alertModal.isOpen}
+        title={alertModal.title}
+        message={alertModal.message}
+        type={alertModal.type}
+        onClose={closeAlert}
+      />
+      
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        type={confirmModal.type}
+        confirmText={confirmModal.confirmText}
+        cancelText={confirmModal.cancelText}
+        onConfirm={() => {
+          if (confirmModal.onConfirm) {
+            confirmModal.onConfirm();
+          }
+        }}
+        onClose={closeConfirm}
+      />
     </div>
   );
 };

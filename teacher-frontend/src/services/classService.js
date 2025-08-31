@@ -31,4 +31,25 @@ export const classService = {
     const response = await api.get(`/api/classes/${classId}/students`);
     return response.data;
   },
+  
+  // Get students enrolled in a class (for reports)
+  getClassStudents: async (classId) => {
+    const response = await api.get(`/api/attendance/students/${classId}`);
+    return response.data;
+  },
+  
+  enrollStudent: async (classId, studentId) => {
+    const response = await api.post(`/api/classes/${classId}/enroll`, { studentId });
+    return response.data;
+  },
+  
+  enrollStudentByEnrollmentNo: async (classId, enrollmentNo) => {
+    const response = await api.post(`/api/classes/${classId}/enroll-by-enrollment-no`, { enrollmentNo });
+    return response.data;
+  },
+  
+  removeStudentFromClass: async (classId, studentId) => {
+    const response = await api.delete(`/api/classes/${classId}/students/${studentId}`);
+    return response.data;
+  },
 };

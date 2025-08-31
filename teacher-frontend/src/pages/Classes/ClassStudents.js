@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from 'react-query';
 import { classService } from '../../services/classService';
+import { userService } from '../../services/userServer';
 import { useModal } from '../../hooks/useModal';
 import AlertModal from '../../components/common/AlertModal';
 import ConfirmModal from '../../components/common/ConfirmModal';
@@ -23,32 +24,82 @@ const ClassStudents = () => {
     () => classService.getClassById(id)
   );
 
-  // Mock students data (replace with actual API call)
-  const { data: students, isLoading: studentsLoading } = useQuery(
-    ['students', id],
-    () => Promise.resolve([
-      {
-        _id: '1',
-        name: 'John Doe',
-        enrollmentNo: 'CS001',
-        email: 'john@example.com',
-        attendanceRate: 85
-      },
-      {
-        _id: '2',
-        name: 'Jane Smith',
-        enrollmentNo: 'CS002',
-        email: 'jane@example.com',
-        attendanceRate: 92
-      },
-      {
-        _id: '3',
-        name: 'Bob Johnson',
-        enrollmentNo: 'CS003',
-        email: 'bob@example.com',
-        attendanceRate: 78
+  // Fetch enrolled students
+  const { data: studentsData, isLoading: studentsLoading, refetch: refetchStudents } = useQuery(
+    ['class-students', id],
+    () => classService.getStudentsInClass(id),
+    {
+      enabled: !!id,
+      onError: (error) => {
+        console.error('Error fetching students:', error);
+        showAlert('Failed to fetch students', 'error');
       }
-    ])
+    }
+  );
+
+  // Extract students array from response
+  const students = studentsData?.data || [];
+
+  // Add student mutation
+  const addStudentMutation = useMutation(
+    async (studentData) => {
+      // First try to enroll by enrollment number (if student exists)
+      try {
+        return await classService.enrollStudentByEnrollmentNo(id, studentData.enrollmentNo);
+      } catch (error) {
+        // If student doesn't exist (404 or enrollment number not found), create the student first
+        if (error?.response?.status === 404 || error?.response?.data?.message?.includes('not found')) {
+          console.log('Student not found, creating new student...');
+          
+          // Create the student first
+          await userService.register({
+            name: studentData.name,
+            email: studentData.email,
+            enrollmentNo: studentData.enrollmentNo,
+            role: 'student',
+            password: studentData.enrollmentNo // Default password is enrollment number
+          });
+          
+          // Then enroll them in the class
+          return await classService.enrollStudentByEnrollmentNo(id, studentData.enrollmentNo);
+        } else {
+          // Re-throw other errors
+          throw error;
+        }
+      }
+    },
+    {
+      onSuccess: (data) => {
+        console.log('Student added successfully:', data);
+        showAlert('Student enrolled successfully!', 'success');
+        setNewStudent({ name: '', enrollmentNo: '', email: '' });
+        setShowAddStudent(false);
+        refetchStudents();
+        queryClient.invalidateQueries(['class-students', id]);
+      },
+      onError: (error) => {
+        console.error('Error adding student:', error);
+        const errorMessage = error?.response?.data?.message || 'Failed to enroll student';
+        showAlert(errorMessage, 'error');
+      }
+    }
+  );
+
+  // Remove student mutation
+  const removeStudentMutation = useMutation(
+    (studentId) => classService.removeStudentFromClass(id, studentId),
+    {
+      onSuccess: () => {
+        showAlert('Student removed successfully!', 'success');
+        refetchStudents();
+        queryClient.invalidateQueries(['class-students', id]);
+      },
+      onError: (error) => {
+        console.error('Error removing student:', error);
+        const errorMessage = error?.response?.data?.message || 'Failed to remove student';
+        showAlert(errorMessage, 'error');
+      }
+    }
   );
 
   const handleAddStudent = (e) => {
@@ -58,20 +109,15 @@ const ClassStudents = () => {
       return;
     }
     
-    // Here you would call the API to add the student
-    console.log('Adding student:', newStudent);
-    showAlert('Student added successfully! (Demo)', 'success');
-    setNewStudent({ name: '', enrollmentNo: '', email: '' });
-    setShowAddStudent(false);
+    // Call the API to add the student by enrollment number
+    addStudentMutation.mutate(newStudent);
   };
 
   const handleRemoveStudent = (studentId) => {
     showConfirm(
-      'Are you sure you want to remove this student?',
+      'Are you sure you want to remove this student from the class?',
       () => {
-        // Here you would call the API to remove the student
-        console.log('Removing student:', studentId);
-        showAlert('Student removed successfully! (Demo)', 'success');
+        removeStudentMutation.mutate(studentId);
       },
       {
         title: 'Remove Student',
@@ -82,7 +128,7 @@ const ClassStudents = () => {
     );
   };
 
-  if (classLoading) {
+  if (classLoading || studentsLoading) {
     return (
       <div className="p-6">
         <div className="animate-pulse">
@@ -154,6 +200,12 @@ const ClassStudents = () => {
         <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-md">
             <h3 className="text-lg font-medium text-gray-900 mb-4">Add New Student</h3>
+            <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
+              <p className="text-sm text-blue-800">
+                💡 <strong>Note:</strong> If the student doesn't exist in the system, they will be created automatically. 
+                Their default password will be their enrollment number.
+              </p>
+            </div>
             <form onSubmit={handleAddStudent} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -194,9 +246,10 @@ const ClassStudents = () => {
               <div className="flex space-x-3 pt-4">
                 <button
                   type="submit"
-                  className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  disabled={addStudentMutation.isLoading}
+                  className="flex-1 bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Add Student
+                  {addStudentMutation.isLoading ? 'Adding...' : 'Add Student'}
                 </button>
                 <button
                   type="button"
@@ -252,31 +305,27 @@ const ClassStudents = () => {
                       <p className="text-sm text-gray-500">
                         {student.enrollmentNo} • {student.email}
                       </p>
+                      {student.enrolledAt && (
+                        <p className="text-xs text-gray-400">
+                          Enrolled: {new Date(student.enrolledAt).toLocaleDateString()}
+                        </p>
+                      )}
                     </div>
                   </div>
                   <div className="flex items-center space-x-4">
-                    <div className="text-right">
-                      <p className="text-sm text-gray-500">Attendance Rate</p>
-                      <p className={`text-lg font-semibold ${
-                        student.attendanceRate >= 85 ? 'text-green-600' :
-                        student.attendanceRate >= 75 ? 'text-yellow-600' :
-                        'text-red-600'
-                      }`}>
-                        {student.attendanceRate}%
-                      </p>
-                    </div>
                     <div className="flex space-x-2">
                       <button
-                        onClick={() => showAlert(`Viewing details for ${student.name} (Demo)`, 'info', 'Student Details')}
+                        onClick={() => showAlert(`Viewing details for ${student.name}`, 'info', 'Student Details')}
                         className="text-blue-600 hover:text-blue-500 text-sm font-medium"
                       >
                         View Details
                       </button>
                       <button
                         onClick={() => handleRemoveStudent(student._id)}
-                        className="text-red-600 hover:text-red-500 text-sm font-medium"
+                        disabled={removeStudentMutation.isLoading}
+                        className="text-red-600 hover:text-red-500 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        Remove
+                        {removeStudentMutation.isLoading ? 'Removing...' : 'Remove'}
                       </button>
                     </div>
                   </div>

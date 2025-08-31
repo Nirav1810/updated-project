@@ -2,6 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from 'react-query';
 import { classService } from '../../services/classService';
+import { attendanceService } from '../../services/attendanceService';
 import { useAuth } from '../../contexts/AuthContext';
 
 const Dashboard = () => {
@@ -12,9 +13,15 @@ const Dashboard = () => {
     classService.getClasses
   );
 
+  const { data: attendanceStats, isLoading: statsLoading } = useQuery(
+    'attendanceStats',
+    attendanceService.getAttendanceStats
+  );
+
   const classesArray = Array.isArray(classes) ? classes : [];
   const totalClasses = classesArray.length;
   const totalStudents = classesArray.reduce((sum, cls) => sum + (cls.studentCount || 0), 0);
+  const stats = attendanceStats?.data || {};
 
   return (
     <div className="p-6">
@@ -71,7 +78,9 @@ const Dashboard = () => {
             </div>
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-500">Today's Classes</p>
-              <p className="text-2xl font-semibold text-gray-900">-</p>
+              <p className="text-2xl font-semibold text-gray-900">
+                {statsLoading ? '...' : stats.todayAttendance || 0}
+              </p>
             </div>
           </div>
         </div>
@@ -85,7 +94,9 @@ const Dashboard = () => {
             </div>
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-500">Attendance Rate</p>
-              <p className="text-2xl font-semibold text-gray-900">-</p>
+              <p className="text-2xl font-semibold text-gray-900">
+                {statsLoading ? '...' : `${stats.attendanceRate || 0}%`}
+              </p>
             </div>
           </div>
         </div>

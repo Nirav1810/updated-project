@@ -1,9 +1,14 @@
 import express from 'express';
 import { 
   createAttendanceRecord, 
+  markManualAttendance,
+  getStudentsForClass,
+  getAllStudents,
+  bulkEnrollStudents,
   getAllAttendance, 
   getAttendanceByStudent,
   getAttendanceByClass,
+  getAttendanceStats,
   generateQRSession,
   refreshQRToken,
   terminateQRSession,
@@ -20,7 +25,12 @@ router.use(protect);
 
 // Attendance Routes
 router.route('/').post(teacher, createAttendanceRecord).get(getAllAttendance);
+router.route('/stats').get(teacher, getAttendanceStats); // Add stats endpoint
 router.route('/mark').post(teacher, createAttendanceRecord); // Add mark endpoint for frontend
+router.route('/manual').post(teacher, markManualAttendance); // Manual attendance marking
+router.route('/students/:classId').get(teacher, getStudentsForClass); // Get students for class
+router.route('/all-students').get(teacher, getAllStudents); // Get all students (temporary)
+router.route('/bulk-enroll').post(teacher, bulkEnrollStudents); // Bulk enroll students
 router.route('/student/:studentId').get(getAttendanceByStudent);
 router.route('/class/:classId').get(getAttendanceByClass); // Add class-specific attendance
 

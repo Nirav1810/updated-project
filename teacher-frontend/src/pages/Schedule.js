@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from 'react-query';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { scheduleService } from '../services/scheduleService';
+import { recurringScheduleService } from '../services/recurringScheduleService';
 import { classService } from '../services/classService';
 import { timeSlotService } from '../services/timeSlotService';
 import { useModal } from '../hooks/useModal';
@@ -9,9 +10,11 @@ import AlertModal from '../components/common/AlertModal';
 import ConfirmModal from '../components/common/ConfirmModal';
 
 const SchedulePage = () => {
+  const [activeTab, setActiveTab] = useState('weekly'); // 'weekly', 'semester'
   const [selectedWeek, setSelectedWeek] = useState('');
   const [selectedDate, setSelectedDate] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showCreateRecurringModal, setShowCreateRecurringModal] = useState(false);
   const [showMergeModal, setShowMergeModal] = useState(false);
   const [selectedSlot, setSelectedSlot] = useState(null);
   const [mergeData, setMergeData] = useState({ sourceId: '', targetId: '', customLabel: '' });
@@ -21,6 +24,21 @@ const SchedulePage = () => {
     timeSlotId: '',
     roomId: '',
     customRoom: ''
+  });
+
+  const [recurringFormData, setRecurringFormData] = useState({
+    classId: '',
+    sessionType: 'lecture',
+    dayOfWeek: 'Monday',
+    startTime: '09:00',
+    endTime: '10:00',
+    roomNumber: '',
+    semester: 'VII',
+    academicYear: '2025-26',
+    semesterStartDate: '2025-08-01',
+    semesterEndDate: '2025-12-15',
+    description: '',
+    notes: ''
   });
 
   const queryClient = useQueryClient();
@@ -85,6 +103,20 @@ const SchedulePage = () => {
     }
   });
 
+  // Fetch recurring schedules
+  const { data: recurringSchedules, isLoading: recurringLoading } = useQuery({
+    queryKey: ['recurringSchedules'],
+    queryFn: recurringScheduleService.getRecurringSchedules,
+    enabled: activeTab === 'semester'
+  });
+
+  // Fetch today's schedule
+  const { data: todaysSchedule } = useQuery({
+    queryKey: ['todaysSchedule'],
+    queryFn: recurringScheduleService.getTodaysSchedule,
+    enabled: activeTab === 'semester'
+  });
+
   // Create schedule mutation
   const createScheduleMutation = useMutation({
     mutationFn: scheduleService.createSchedule,
@@ -146,6 +178,61 @@ const SchedulePage = () => {
     },
     onError: (error) => {
       showAlert(`Error: ${error.response?.data?.message || 'Failed to split schedule'}`, 'error');
+    }
+  });
+
+  // Create recurring schedule mutation
+  const createRecurringScheduleMutation = useMutation({
+    mutationFn: async (scheduleData) => {
+      if (Array.isArray(scheduleData)) {
+        // Handle multiple schedules (weekly mode)
+        const results = [];
+        for (const schedule of scheduleData) {
+          const result = await recurringScheduleService.createRecurringSchedule(schedule);
+          results.push(result);
+        }
+        return results;
+      } else {
+        // Handle single schedule
+        return await recurringScheduleService.createRecurringSchedule(scheduleData);
+      }
+    },
+    onSuccess: (data) => {
+      const count = Array.isArray(data) ? data.length : 1;
+      showAlert(`${count} recurring schedule(s) created successfully!`, 'success');
+      queryClient.invalidateQueries(['recurringSchedules']);
+      queryClient.invalidateQueries(['todaysSchedule']);
+      setShowCreateRecurringModal(false);
+      setRecurringFormData({
+        classId: '',
+        sessionType: 'lecture',
+        dayOfWeek: 'Monday',
+        startTime: '09:00',
+        endTime: '10:00',
+        roomNumber: '',
+        semester: 'VII',
+        academicYear: '2025-26',
+        semesterStartDate: '2025-08-01',
+        semesterEndDate: '2025-12-15',
+        description: '',
+        notes: ''
+      });
+    },
+    onError: (error) => {
+      showAlert(`Error: ${error.response?.data?.message || 'Failed to create recurring schedule'}`, 'error');
+    }
+  });
+
+  // Delete recurring schedule mutation
+  const deleteRecurringScheduleMutation = useMutation({
+    mutationFn: recurringScheduleService.deleteRecurringSchedule,
+    onSuccess: () => {
+      showAlert('Recurring schedule deleted successfully!', 'success');
+      queryClient.invalidateQueries(['recurringSchedules']);
+      queryClient.invalidateQueries(['todaysSchedule']);
+    },
+    onError: (error) => {
+      showAlert(`Error: ${error.response?.data?.message || 'Failed to delete recurring schedule'}`, 'error');
     }
   });
 
@@ -438,36 +525,88 @@ const SchedulePage = () => {
 
   return (
     <div className="p-6">
-      <div className="flex justify-between items-center mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Weekly Schedule</h1>
-          <p className="text-gray-600">Schedule for week of {selectedDate ? new Date(selectedDate).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) : 'selected date'}</p>
-        </div>
-        <div className="flex items-center space-x-4">
-          {/* Date selector */}
+      {/* Header */}
+      <div className="mb-6">
+        <div className="flex justify-between items-start mb-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Select Date</label>
-            <input
-              type="date"
-              value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
-              className="block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
-            />
-            <p className="text-xs text-gray-500 mt-1">
-              Week {selectedWeek ? selectedWeek.split('-W')[1] : ''} of {selectedWeek ? selectedWeek.split('-W')[0] : ''}
+            <h1 className="text-2xl font-bold text-gray-900">Schedule Management</h1>
+            <p className="text-gray-600 mt-1">
+              {activeTab === 'weekly' 
+                ? `Schedule for week of ${selectedDate ? new Date(selectedDate).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) : 'selected date'}`
+                : 'Manage your recurring schedules for the entire semester'
+              }
             </p>
           </div>
-          <button
-            onClick={() => setShowCreateModal(true)}
-            className="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 transition-colors mt-6"
-          >
-            Add Schedule
-          </button>
+          
+          {/* Action Buttons */}
+          <div className="flex items-center space-x-4">
+            {activeTab === 'semester' && (
+              <button
+                onClick={() => setShowCreateRecurringModal(true)}
+                className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg transition-colors flex items-center space-x-2"
+              >
+                <span>➕</span>
+                <span>Create Recurring Schedule</span>
+              </button>
+            )}
+          </div>
         </div>
+
+        {/* Date selector for weekly tab */}
+        {activeTab === 'weekly' && (
+          <div className="flex justify-between items-center">
+            <div></div>
+            <div className="flex items-center space-x-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Select Date</label>
+                <input
+                  type="date"
+                  value={selectedDate}
+                  onChange={(e) => setSelectedDate(e.target.value)}
+                  className="block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Week {selectedWeek ? selectedWeek.split('-W')[1] : ''} of {selectedWeek ? selectedWeek.split('-W')[0] : ''}
+                </p>
+              </div>
+              <button
+                onClick={() => setShowCreateModal(true)}
+                className="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 transition-colors mt-6"
+              >
+                Add Schedule
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* Timetable Grid */}
-      <DragDropContext onDragEnd={handleDragEnd}>
+      {/* Tab Navigation */}
+      <div className="border-b border-gray-200 mb-6">
+        <nav className="-mb-px flex space-x-8">
+          {[
+            { id: 'weekly', name: 'Weekly Schedule', icon: '📅' },
+            { id: 'semester', name: 'Semester Schedule', icon: '📋' }
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                activeTab === tab.id
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              {tab.icon} {tab.name}
+            </button>
+          ))}
+        </nav>
+      </div>
+
+      {/* Tab Content */}
+      {activeTab === 'weekly' && (
+        <>
+          {/* Timetable Grid */}
+          <DragDropContext onDragEnd={handleDragEnd}>
         <div className="bg-white rounded-lg shadow overflow-hidden">
           <div className="overflow-x-auto">
             <table className="min-w-full">
@@ -833,6 +972,35 @@ const SchedulePage = () => {
           </div>
         </div>
       )}
+      </>
+      )}
+
+      {activeTab === 'semester' && (
+        <SemesterScheduleContent 
+          recurringSchedules={recurringSchedules}
+          todaysSchedule={todaysSchedule}
+          recurringLoading={recurringLoading}
+          deleteRecurringScheduleMutation={deleteRecurringScheduleMutation}
+          showAlert={showAlert}
+          showConfirm={showConfirm}
+        />
+      )}
+
+      {/* Recurring Schedule Create Modal */}
+      {showCreateRecurringModal && (
+        <CreateRecurringScheduleModal
+          isOpen={showCreateRecurringModal}
+          onClose={() => setShowCreateRecurringModal(false)}
+          onSubmit={(data) => createRecurringScheduleMutation.mutate(data)}
+          classes={classesData}
+          isLoading={createRecurringScheduleMutation.isLoading}
+          formData={recurringFormData}
+          setFormData={setRecurringFormData}
+          showAlert={showAlert}
+          showConfirm={showConfirm}
+          existingSchedules={recurringSchedules?.data || []}
+        />
+      )}
 
       {/* Custom Alert Modal */}
       <AlertModal
@@ -854,6 +1022,1105 @@ const SchedulePage = () => {
         confirmText={confirmModal.confirmText}
         cancelText={confirmModal.cancelText}
       />
+    </div>
+  );
+};
+
+// Semester Schedule Content Component
+const SemesterScheduleContent = ({ 
+  recurringSchedules, 
+  todaysSchedule, 
+  recurringLoading, 
+  deleteRecurringScheduleMutation,
+  showAlert,
+  showConfirm 
+}) => {
+  const schedulesArray = recurringSchedules?.data || [];
+  const todaysClasses = todaysSchedule?.data || [];
+
+  const handleDeleteSchedule = (schedule) => {
+    showConfirm(
+      `Are you sure you want to delete the recurring schedule for "${schedule.title}"? This will cancel all future classes.`,
+      () => deleteRecurringScheduleMutation.mutate(schedule._id),
+      {
+        title: 'Delete Recurring Schedule',
+        type: 'danger',
+        confirmText: 'Delete',
+        cancelText: 'Cancel'
+      }
+    );
+  };
+
+  const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const timeSlots = [
+    { id: '09:00-10:00', start: '09:00', end: '10:00', label: '9:00 AM - 10:00 AM' },
+    { id: '10:00-11:00', start: '10:00', end: '11:00', label: '10:00 AM - 11:00 AM' },
+    { id: '11:15-12:15', start: '11:15', end: '12:15', label: '11:15 AM - 12:15 PM' },
+    { id: '12:15-13:15', start: '12:15', end: '13:15', label: '12:15 PM - 1:15 PM' },
+    { id: '14:00-15:00', start: '14:00', end: '15:00', label: '2:00 PM - 3:00 PM' },
+    { id: '15:00-16:00', start: '15:00', end: '16:00', label: '3:00 PM - 4:00 PM' },
+    { id: '16:15-17:15', start: '16:15', end: '17:15', label: '4:15 PM - 5:15 PM' }
+  ];
+
+  // Create a data structure similar to weekly schedule
+  const getScheduleForSlot = (day, timeSlot) => {
+    return schedulesArray.find(schedule => 
+      schedule.dayOfWeek === day && 
+      schedule.startTime === timeSlot.start && 
+      schedule.endTime === timeSlot.end
+    );
+  };
+
+  if (recurringLoading) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Today's Classes Summary */}
+      {todaysClasses.length > 0 && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <h3 className="text-lg font-semibold text-blue-900 mb-2">📋 Today's Classes ({todaysClasses.length})</h3>
+          <div className="flex flex-wrap gap-2">
+            {todaysClasses.map((classInstance, index) => (
+              <span
+                key={classInstance._id}
+                className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800"
+              >
+                {classInstance.classId.subjectCode} • {classInstance.startTime}-{classInstance.endTime}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Semester Schedule Grid - Same style as Weekly Schedule */}
+      <div className="bg-white rounded-lg shadow overflow-hidden">
+        <div className="bg-gray-50 px-6 py-4 border-b border-gray-200">
+          <h2 className="text-xl font-semibold text-gray-900">Semester Schedule Overview</h2>
+          <p className="text-gray-600 mt-1">Your recurring classes for the entire semester</p>
+        </div>
+        
+        <div className="overflow-x-auto">
+          <table className="min-w-full">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-32">
+                  Time
+                </th>
+                {days.map((day) => (
+                  <th key={day} className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    {day}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="bg-white divide-y divide-gray-200">
+              {timeSlots.map((timeSlot) => (
+                <tr key={timeSlot.id}>
+                  <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900 bg-gray-50">
+                    <div className="text-center">
+                      <div className="font-semibold">{timeSlot.start}</div>
+                      <div className="text-xs text-gray-500">{timeSlot.end}</div>
+                    </div>
+                  </td>
+                  {days.map((day) => {
+                    const schedule = getScheduleForSlot(day, timeSlot);
+                    
+                    return (
+                      <td key={`${day}-${timeSlot.id}`} className="px-2 py-2 relative">
+                        <div className="min-h-[80px] border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+                          {schedule ? (
+                            <div className="p-3 h-full">
+                              <div className="flex flex-col h-full">
+                                <div className="flex-1">
+                                  <div className="font-semibold text-sm text-gray-900 mb-1">
+                                    {schedule.classId.subjectCode}
+                                  </div>
+                                  <div className="text-xs text-gray-600 mb-1">
+                                    {schedule.classId.subjectName}
+                                  </div>
+                                  <div className="text-xs text-gray-500 mb-2">
+                                    📍 {schedule.roomNumber}
+                                  </div>
+                                  <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${
+                                    schedule.sessionType === 'lecture' ? 'bg-blue-100 text-blue-800' :
+                                    schedule.sessionType === 'lab' ? 'bg-green-100 text-green-800' :
+                                    schedule.sessionType === 'tutorial' ? 'bg-purple-100 text-purple-800' :
+                                    'bg-orange-100 text-orange-800'
+                                  }`}>
+                                    {schedule.sessionType.toUpperCase()}
+                                  </span>
+                                </div>
+                                <div className="mt-2">
+                                  <button
+                                    onClick={() => handleDeleteSchedule(schedule)}
+                                    className="text-xs text-red-600 hover:text-red-800 font-medium"
+                                    disabled={deleteRecurringScheduleMutation.isLoading}
+                                  >
+                                    🗑️ Remove
+                                  </button>
+                                </div>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="h-full flex items-center justify-center text-gray-300">
+                              <span className="text-lg">—</span>
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        
+        {schedulesArray.length === 0 && (
+          <div className="text-center py-12 bg-gray-50">
+            <div className="text-gray-400 mb-4">
+              <svg className="mx-auto h-12 w-12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+            </div>
+            <h3 className="text-lg font-medium text-gray-900 mb-1">No recurring schedules</h3>
+            <p className="text-gray-500 mb-4">Create your first recurring schedule to get started</p>
+          </div>
+        )}
+      </div>
+
+      {/* Schedule Statistics */}
+      {schedulesArray.length > 0 && (
+        <div className="bg-white rounded-lg shadow-md p-6">
+          <h3 className="text-lg font-semibold mb-4">� Schedule Statistics</h3>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="text-center">
+              <div className="text-2xl font-bold text-blue-600">{schedulesArray.length}</div>
+              <div className="text-sm text-gray-600">Total Classes</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-green-600">
+                {schedulesArray.filter(s => s.sessionType === 'lecture').length}
+              </div>
+              <div className="text-sm text-gray-600">Lectures</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-purple-600">
+                {schedulesArray.filter(s => s.sessionType === 'lab').length}
+              </div>
+              <div className="text-sm text-gray-600">Labs</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-orange-600">
+                {new Set(schedulesArray.map(s => s.dayOfWeek)).size}
+              </div>
+              <div className="text-sm text-gray-600">Active Days</div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// Create Recurring Schedule Modal Component
+const CreateRecurringScheduleModal = ({ 
+  isOpen, 
+  onClose, 
+  onSubmit, 
+  classes, 
+  isLoading, 
+  formData, 
+  setFormData,
+  showAlert,
+  showConfirm,
+  existingSchedules = []
+}) => {
+  const [scheduleMode, setScheduleMode] = React.useState('weekly'); // 'single' or 'weekly'
+  const [weeklySchedules, setWeeklySchedules] = React.useState({});
+  const [globalSettings, setGlobalSettings] = React.useState({
+    semester: 'VII',
+    academicYear: '2025-26',
+    semesterStartDate: '2025-08-01',
+    semesterEndDate: '2025-12-15'
+  });
+
+  const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const timeSlots = [
+    { id: '09:00-10:00', start: '09:00', end: '10:00', label: '9:00 AM - 10:00 AM' },
+    { id: '10:00-11:00', start: '10:00', end: '11:00', label: '10:00 AM - 11:00 AM' },
+    { id: '11:15-12:15', start: '11:15', end: '12:15', label: '11:15 AM - 12:15 PM' },
+    { id: '12:15-13:15', start: '12:15', end: '13:15', label: '12:15 PM - 1:15 PM' },
+    { id: '14:00-15:00', start: '14:00', end: '15:00', label: '2:00 PM - 3:00 PM' },
+    { id: '15:00-16:00', start: '15:00', end: '16:00', label: '3:00 PM - 4:00 PM' },
+    { id: '16:15-17:15', start: '16:15', end: '17:15', label: '4:15 PM - 5:15 PM' }
+  ];
+
+  const classesArray = Array.isArray(classes) ? classes : [];
+
+  // Check for conflicts with existing schedules
+  const checkTimeConflict = (day, timeSlot) => {
+    return existingSchedules.some(schedule => 
+      schedule.dayOfWeek === day && 
+      schedule.startTime === timeSlot.start && 
+      schedule.endTime === timeSlot.end
+    );
+  };
+
+  const getConflictingSchedule = (day, timeSlot) => {
+    return existingSchedules.find(schedule => 
+      schedule.dayOfWeek === day && 
+      schedule.startTime === timeSlot.start && 
+      schedule.endTime === timeSlot.end
+    );
+  };
+
+  const handleCellClick = (day, timeSlot) => {
+    const cellKey = `${day}-${timeSlot.id}`;
+    
+    // Check for conflict with existing schedules
+    if (checkTimeConflict(day, timeSlot)) {
+      const conflictingSchedule = getConflictingSchedule(day, timeSlot);
+      const roomInfo = conflictingSchedule.roomNumber ? ` in Room ${conflictingSchedule.roomNumber}` : '';
+      const subjectInfo = conflictingSchedule.classId?.subjectCode ? ` (${conflictingSchedule.classId.subjectCode})` : '';
+      showAlert(
+        'Schedule Conflict',
+        `You already have a class scheduled on ${day} from ${timeSlot.start} to ${timeSlot.end}${roomInfo}.\n\nExisting Schedule: ${conflictingSchedule.title}${subjectInfo}\nSession Type: ${conflictingSchedule.sessionType}\n\nPlease choose a different time slot.`,
+        'warning'
+      );
+      return;
+    }
+
+    setWeeklySchedules(prev => {
+      const current = prev[cellKey];
+      if (current) {
+        // Remove if already exists
+        const newSchedules = { ...prev };
+        delete newSchedules[cellKey];
+        return newSchedules;
+      } else {
+        // Check if this can be merged with adjacent time slots
+        const canMergeWithNext = checkCanMergeTimeSlots(day, timeSlot, prev);
+        
+        // Add new schedule slot
+        return {
+          ...prev,
+          [cellKey]: {
+            day,
+            timeSlot,
+            classId: '',
+            sessionType: 'lecture',
+            roomNumber: '',
+            description: '',
+            isMerged: canMergeWithNext
+          }
+        };
+      }
+    });
+  };
+
+  const checkCanMergeTimeSlots = (day, currentTimeSlot, existingSchedules) => {
+    const currentIndex = timeSlots.findIndex(slot => slot.id === currentTimeSlot.id);
+    
+    // Check if next slot exists and is selected (regardless of subject)
+    if (currentIndex < timeSlots.length - 1) {
+      const nextSlot = timeSlots[currentIndex + 1];
+      const nextCellKey = `${day}-${nextSlot.id}`;
+      const nextSchedule = existingSchedules[nextCellKey];
+      
+      if (nextSchedule) {
+        return true;
+      }
+    }
+    
+    // Check if previous slot exists and is selected (regardless of subject)
+    if (currentIndex > 0) {
+      const prevSlot = timeSlots[currentIndex - 1];
+      const prevCellKey = `${day}-${prevSlot.id}`;
+      const prevSchedule = existingSchedules[prevCellKey];
+      
+      if (prevSchedule) {
+        return true;
+      }
+    }
+    
+    return false;
+  };
+
+  // Check if this slot can be a lab session (either merged or manually selected)
+  const canSelectLab = (cellKey, cellData) => {
+    // Always allow lab selection manually
+    return true;
+  };
+
+  // Check if consecutive slots can be merged into a lab
+  const checkConsecutiveMerge = (day, timeSlot, schedules) => {
+    const currentIndex = timeSlots.findIndex(slot => slot.id === timeSlot.id);
+    
+    // Check if next slot exists and is selected
+    if (currentIndex < timeSlots.length - 1) {
+      const nextSlot = timeSlots[currentIndex + 1];
+      const nextCellKey = `${day}-${nextSlot.id}`;
+      const nextSchedule = schedules[nextCellKey];
+      
+      if (nextSchedule && nextSchedule.classId) {
+        return {
+          canMerge: true,
+          nextSlot: nextSlot,
+          nextKey: nextCellKey,
+          mergeType: 'forward'
+        };
+      }
+    }
+    
+    // Check if previous slot exists and is selected
+    if (currentIndex > 0) {
+      const prevSlot = timeSlots[currentIndex - 1];
+      const prevCellKey = `${day}-${prevSlot.id}`;
+      const prevSchedule = schedules[prevCellKey];
+      
+      if (prevSchedule && prevSchedule.classId) {
+        return {
+          canMerge: true,
+          prevSlot: prevSlot,
+          prevKey: prevCellKey,
+          mergeType: 'backward'
+        };
+      }
+    }
+    
+    return { canMerge: false };
+  };
+
+  // Handle merging two consecutive slots into a lab
+  const handleMergeToLab = (cellKey, day, timeSlot) => {
+    const mergeInfo = checkConsecutiveMerge(day, timeSlot, weeklySchedules);
+    
+    if (mergeInfo.canMerge) {
+      const currentCell = weeklySchedules[cellKey];
+      
+      if (mergeInfo.mergeType === 'forward') {
+        const nextCell = weeklySchedules[mergeInfo.nextKey];
+        
+        // Check if both slots have the same subject
+        if (currentCell.classId && nextCell.classId && currentCell.classId === nextCell.classId) {
+          // Merge into lab - keep first slot, remove second
+          setWeeklySchedules(prev => {
+            const newSchedules = { ...prev };
+            
+            // Update first slot to be a lab
+            newSchedules[cellKey] = {
+              ...currentCell,
+              sessionType: 'lab',
+              isMerged: true,
+              mergedWith: mergeInfo.nextKey,
+              startTime: timeSlot.start,
+              endTime: mergeInfo.nextSlot.end
+            };
+            
+            // Remove the second slot
+            delete newSchedules[mergeInfo.nextKey];
+            
+            return newSchedules;
+          });
+          
+          showAlert(
+            'Merged to Lab',
+            `Successfully merged ${timeSlot.label} and ${mergeInfo.nextSlot.label} into a lab session.`,
+            'success'
+          );
+        }
+      } else if (mergeInfo.mergeType === 'backward') {
+        const prevCell = weeklySchedules[mergeInfo.prevKey];
+        
+        // Check if both slots have the same subject
+        if (currentCell.classId && prevCell.classId && currentCell.classId === prevCell.classId) {
+          // Merge into lab - keep first slot, remove current
+          setWeeklySchedules(prev => {
+            const newSchedules = { ...prev };
+            
+            // Update previous slot to be a lab
+            newSchedules[mergeInfo.prevKey] = {
+              ...prevCell,
+              sessionType: 'lab',
+              isMerged: true,
+              mergedWith: cellKey,
+              startTime: mergeInfo.prevSlot.start,
+              endTime: timeSlot.end
+            };
+            
+            // Remove the current slot
+            delete newSchedules[cellKey];
+            
+            return newSchedules;
+          });
+          
+          showAlert(
+            'Merged to Lab',
+            `Successfully merged ${mergeInfo.prevSlot.label} and ${timeSlot.label} into a lab session.`,
+            'success'
+          );
+        }
+      }
+    }
+  };
+
+  const updateCellData = (cellKey, field, value) => {
+    setWeeklySchedules(prev => {
+      const updated = {
+        ...prev,
+        [cellKey]: {
+          ...prev[cellKey],
+          [field]: value
+        }
+      };
+
+      // If updating classId, check for merging opportunities
+      if (field === 'classId' && value) {
+        const currentSchedule = updated[cellKey];
+        const [day, timeSlotId] = cellKey.split('-');
+        const currentTimeIndex = timeSlots.findIndex(slot => slot.id === timeSlotId);
+        
+        // Check adjacent slots for same class to enable automatic merging
+        let adjacentSlotWithSameClass = null;
+        
+        // Check next slot
+        if (currentTimeIndex < timeSlots.length - 1) {
+          const nextSlot = timeSlots[currentTimeIndex + 1];
+          const nextCellKey = `${day}-${nextSlot.id}`;
+          const nextSchedule = updated[nextCellKey];
+          
+          if (nextSchedule && nextSchedule.classId === value) {
+            adjacentSlotWithSameClass = {
+              type: 'next',
+              slot: nextSlot,
+              key: nextCellKey,
+              schedule: nextSchedule
+            };
+          }
+        }
+        
+        // Check previous slot
+        if (currentTimeIndex > 0) {
+          const prevSlot = timeSlots[currentTimeIndex - 1];
+          const prevCellKey = `${day}-${prevSlot.id}`;
+          const prevSchedule = updated[prevCellKey];
+          
+          if (prevSchedule && prevSchedule.classId === value) {
+            adjacentSlotWithSameClass = {
+              type: 'prev',
+              slot: prevSlot,
+              key: prevCellKey,
+              schedule: prevSchedule
+            };
+          }
+        }
+
+        // If we found an adjacent slot with the same class, offer to merge
+        if (adjacentSlotWithSameClass) {
+          // Use setTimeout to show the merge option after state updates
+          setTimeout(() => {
+            const classInfo = classesArray.find(cls => cls._id === value);
+            const subjectName = classInfo ? classInfo.subjectName : 'Selected Subject';
+            
+            showConfirm(
+              `You have selected ${subjectName} for consecutive time slots. Would you like to merge them into a single lab session?`,
+              () => {
+                // Perform the merge
+                if (adjacentSlotWithSameClass.type === 'next') {
+                  const currentSlot = timeSlots[currentTimeIndex];
+                  const nextSlot = adjacentSlotWithSameClass.slot;
+                  
+                  setWeeklySchedules(prevSchedules => {
+                    const newSchedules = { ...prevSchedules };
+                    
+                    // Update current slot to be a lab with extended time
+                    newSchedules[cellKey] = {
+                      ...newSchedules[cellKey],
+                      sessionType: 'lab',
+                      isMerged: true,
+                      mergedWith: adjacentSlotWithSameClass.key,
+                      endTime: nextSlot.end,
+                      timeRange: `${currentSlot.start}-${nextSlot.end}`
+                    };
+                    
+                    // Remove the next slot
+                    delete newSchedules[adjacentSlotWithSameClass.key];
+                    
+                    return newSchedules;
+                  });
+                  
+                  showAlert(
+                    'Merged to Lab',
+                    `Successfully merged consecutive ${subjectName} slots into a lab session (${currentSlot.start}-${nextSlot.end}).`,
+                    'success'
+                  );
+                } else if (adjacentSlotWithSameClass.type === 'prev') {
+                  const currentSlot = timeSlots[currentTimeIndex];
+                  const prevSlot = adjacentSlotWithSameClass.slot;
+                  
+                  setWeeklySchedules(prevSchedules => {
+                    const newSchedules = { ...prevSchedules };
+                    
+                    // Update previous slot to be a lab with extended time
+                    newSchedules[adjacentSlotWithSameClass.key] = {
+                      ...newSchedules[adjacentSlotWithSameClass.key],
+                      sessionType: 'lab',
+                      isMerged: true,
+                      mergedWith: cellKey,
+                      endTime: currentSlot.end,
+                      timeRange: `${prevSlot.start}-${currentSlot.end}`
+                    };
+                    
+                    // Remove the current slot
+                    delete newSchedules[cellKey];
+                    
+                    return newSchedules;
+                  });
+                  
+                  showAlert(
+                    'Merged to Lab',
+                    `Successfully merged consecutive ${subjectName} slots into a lab session (${prevSlot.start}-${currentSlot.end}).`,
+                    'success'
+                  );
+                }
+              },
+              {
+                title: 'Merge to Lab Session?',
+                type: 'info',
+                confirmText: 'Merge to Lab',
+                cancelText: 'Keep Separate'
+              }
+            );
+          }, 100);
+        }
+      }
+
+      return updated;
+    });
+  };
+
+  const handleSubmitWeekly = () => {
+    const schedules = Object.values(weeklySchedules).filter(schedule => schedule.classId);
+    
+    if (schedules.length === 0) {
+      showAlert('Please add at least one class to the schedule', 'warning');
+      return;
+    }
+
+    // Validate that all schedules have required fields
+    const invalidSchedules = schedules.filter(schedule => 
+      !schedule.classId || !schedule.roomNumber || schedule.roomNumber.trim() === ''
+    );
+
+    if (invalidSchedules.length > 0) {
+      showAlert('Please fill in all required fields (Subject and Room) for all selected time slots', 'warning');
+      return;
+    }
+
+    const schedulesData = schedules.map(schedule => ({
+      classId: schedule.classId,
+      sessionType: schedule.sessionType,
+      dayOfWeek: schedule.day,
+      startTime: schedule.timeSlot.start,
+      endTime: schedule.timeSlot.end,
+      roomNumber: schedule.roomNumber.trim(),
+      description: schedule.description || '',
+      ...globalSettings
+    }));
+
+    // Use the mutation to create multiple schedules
+    onSubmit(schedulesData);
+  };
+
+  const handleSubmitSingle = (e) => {
+    e.preventDefault();
+    onSubmit(formData);
+  };
+
+  const handleChange = (e) => {
+    setFormData(prev => ({
+      ...prev,
+      [e.target.name]: e.target.value
+    }));
+  };
+
+  const handleGlobalSettingsChange = (e) => {
+    setGlobalSettings(prev => ({
+      ...prev,
+      [e.target.name]: e.target.value
+    }));
+  };
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg p-6 w-full max-w-6xl mx-4 max-h-screen overflow-y-auto">
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-xl font-semibold">Create Recurring Schedule</h2>
+          
+          {/* Mode Toggle */}
+          <div className="flex bg-gray-100 rounded-lg p-1">
+            <button
+              onClick={() => setScheduleMode('single')}
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                scheduleMode === 'single'
+                  ? 'bg-white text-blue-600 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              📝 Single Schedule
+            </button>
+            <button
+              onClick={() => setScheduleMode('weekly')}
+              className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                scheduleMode === 'weekly'
+                  ? 'bg-white text-blue-600 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              📅 Weekly Schedule
+            </button>
+          </div>
+        </div>
+
+        {scheduleMode === 'weekly' ? (
+          <div className="space-y-6">
+            {/* Global Settings */}
+            <div className="bg-gray-50 rounded-lg p-4">
+              <h3 className="text-lg font-medium mb-4">Semester Settings</h3>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Semester</label>
+                  <input
+                    type="text"
+                    name="semester"
+                    value={globalSettings.semester}
+                    onChange={handleGlobalSettingsChange}
+                    placeholder="e.g., VII"
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Academic Year</label>
+                  <input
+                    type="text"
+                    name="academicYear"
+                    value={globalSettings.academicYear}
+                    onChange={handleGlobalSettingsChange}
+                    placeholder="e.g., 2025-26"
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Semester Start</label>
+                  <input
+                    type="date"
+                    name="semesterStartDate"
+                    value={globalSettings.semesterStartDate}
+                    onChange={handleGlobalSettingsChange}
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Semester End</label>
+                  <input
+                    type="date"
+                    name="semesterEndDate"
+                    value={globalSettings.semesterEndDate}
+                    onChange={handleGlobalSettingsChange}
+                    className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Weekly Schedule Grid */}
+            <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+              <div className="bg-gray-50 px-4 py-3">
+                <h3 className="text-lg font-medium">Weekly Schedule Grid</h3>
+                <p className="text-sm text-gray-600 mt-1">Click on time slots to add classes. Click again to remove.</p>
+                
+                {/* Legend */}
+                <div className="flex flex-wrap gap-4 mt-3 text-xs">
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 border-2 border-dashed border-gray-200 rounded"></div>
+                    <span className="text-gray-600">Available</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 border-2 border-dashed border-blue-300 bg-blue-50 rounded"></div>
+                    <span className="text-gray-600">Selected</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 border-2 border-red-300 bg-red-50 rounded"></div>
+                    <span className="text-gray-600">⚠️ Already Scheduled</span>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="overflow-x-auto">
+                <table className="min-w-full">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-32">
+                        Time
+                      </th>
+                      {days.map(day => (
+                        <th key={day} className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          {day}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {timeSlots.map(timeSlot => (
+                      <tr key={timeSlot.id}>
+                        <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900 bg-gray-50">
+                          <div className="text-center">
+                            <div className="font-semibold">{timeSlot.start}</div>
+                            <div className="text-xs text-gray-500">{timeSlot.end}</div>
+                          </div>
+                        </td>
+                        {days.map(day => {
+                          const cellKey = `${day}-${timeSlot.id}`;
+                          const cellData = weeklySchedules[cellKey];
+                          const hasConflict = checkTimeConflict(day, timeSlot);
+                          const conflictingSchedule = hasConflict ? getConflictingSchedule(day, timeSlot) : null;
+                          
+                          return (
+                            <td key={`${day}-${timeSlot.id}`} className="px-2 py-2">
+                              <div
+                                onClick={() => handleCellClick(day, timeSlot)}
+                                title={hasConflict ? `Occupied: ${conflictingSchedule.title} (${conflictingSchedule.sessionType}) - Room ${conflictingSchedule.roomNumber}` : cellData ? 'Click to remove this schedule' : 'Click to add a new class'}
+                                className={`min-h-[80px] border-2 rounded-lg transition-all ${
+                                  hasConflict
+                                    ? 'border-red-300 bg-red-50 cursor-not-allowed'
+                                    : cellData
+                                    ? 'border-blue-300 bg-blue-50 hover:bg-blue-100 cursor-pointer border-dashed'
+                                    : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50 cursor-pointer border-dashed'
+                                }`}
+                              >
+                                {hasConflict ? (
+                                  <div className="p-2 text-center">
+                                    <div className="text-xs text-red-600 font-medium mb-1">⚠️ Occupied</div>
+                                    <div className="text-xs text-red-700 font-medium truncate mb-1">{conflictingSchedule.title}</div>
+                                    <div className="text-xs text-red-600 truncate">Room: {conflictingSchedule.roomNumber}</div>
+                                    <div className="text-xs text-red-500 truncate">{conflictingSchedule.sessionType}</div>
+                                    {conflictingSchedule.classId && (
+                                      <div className="text-xs text-red-500 truncate mt-1">
+                                        {conflictingSchedule.classId.subjectCode}
+                                      </div>
+                                    )}
+                                  </div>
+                                ) : cellData ? (
+                                  <div className="p-2 space-y-2">
+                                    {/* Remove button */}
+                                    <div className="flex justify-between items-center mb-2">
+                                      <span className="text-xs text-gray-600">
+                                        {cellData.isMerged && cellData.sessionType === 'lab' ? (
+                                          <span className="text-blue-600 font-medium">🔬 Lab Session</span>
+                                        ) : (
+                                          "Click to remove"
+                                        )}
+                                      </span>
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleCellClick(day, timeSlot);
+                                        }}
+                                        className="text-red-500 hover:text-red-700 text-xs font-bold"
+                                      >
+                                        ✕
+                                      </button>
+                                    </div>
+                                    
+                                    {/* Show extended time for merged sessions */}
+                                    {cellData.isMerged && cellData.timeRange && (
+                                      <div className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                                        Extended: {cellData.timeRange}
+                                      </div>
+                                    )}
+                                    
+                                    <select
+                                      value={cellData.classId}
+                                      onChange={(e) => updateCellData(cellKey, 'classId', e.target.value)}
+                                      className="w-full text-xs border border-gray-300 rounded px-2 py-1"
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      <option value="">Select Subject</option>
+                                      {classesArray.map(cls => (
+                                        <option key={cls._id} value={cls._id}>
+                                          {cls.subjectName}
+                                        </option>
+                                      ))}
+                                    </select>
+                                    
+                                    <select
+                                      value={cellData.sessionType}
+                                      onChange={(e) => updateCellData(cellKey, 'sessionType', e.target.value)}
+                                      className="w-full text-xs border border-gray-300 rounded px-2 py-1"
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      <option value="lecture">Lecture</option>
+                                      <option value="lab">Lab</option>
+                                      <option value="practical">Practical</option>
+                                      <option value="tutorial">Tutorial</option>
+                                    </select>
+                                    
+                                    <input
+                                      type="text"
+                                      placeholder="Room (Required)"
+                                      value={cellData.roomNumber}
+                                      onChange={(e) => updateCellData(cellKey, 'roomNumber', e.target.value)}
+                                      className={`w-full text-xs border rounded px-2 py-1 ${
+                                        cellData.roomNumber && cellData.roomNumber.trim() 
+                                          ? 'border-gray-300' 
+                                          : 'border-red-300 bg-red-50'
+                                      }`}
+                                      onClick={(e) => e.stopPropagation()}
+                                    />
+                                  </div>
+                                ) : (
+                                  <div className="h-full flex items-center justify-center text-gray-400 hover:text-gray-600">
+                                    <div className="text-center">
+                                      <span className="text-2xl">+</span>
+                                      <div className="text-xs mt-1">Add Class</div>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Schedule Summary */}
+            {Object.keys(weeklySchedules).length > 0 && (
+              <div className="bg-gray-50 rounded-lg p-4">
+                <h4 className="font-medium text-gray-900 mb-2">Schedule Summary</h4>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <span className="text-green-600 font-medium">
+                      ✓ Complete: {Object.values(weeklySchedules).filter(s => s.classId && s.roomNumber && s.roomNumber.trim()).length}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-red-600 font-medium">
+                      ⚠ Incomplete: {Object.values(weeklySchedules).filter(s => s.classId && (!s.roomNumber || !s.roomNumber.trim())).length}
+                    </span>
+                  </div>
+                </div>
+                {Object.values(weeklySchedules).filter(s => s.classId && (!s.roomNumber || !s.roomNumber.trim())).length > 0 && (
+                  <p className="text-red-600 text-xs mt-2">
+                    Please fill in room numbers for all selected time slots before creating the schedule.
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Submit Button for Weekly */}
+            <div className="flex justify-end space-x-3 pt-4">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2 text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSubmitWeekly}
+                disabled={isLoading}
+                className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
+              >
+                {isLoading ? 'Creating Schedules...' : 
+                 `Create ${Object.values(weeklySchedules).filter(s => s.classId && s.roomNumber && s.roomNumber.trim()).length} Schedule(s)`}
+              </button>
+            </div>
+          </div>
+        ) : (
+          // Single Schedule Form (existing)
+          <form onSubmit={handleSubmitSingle} className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Subject</label>
+                <select
+                  name="classId"
+                  value={formData.classId}
+                  onChange={handleChange}
+                  required
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">Select Subject</option>
+                  {classesArray.map(cls => (
+                    <option key={cls._id} value={cls._id}>
+                      {cls.subjectName}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Session Type</label>
+                <select
+                  name="sessionType"
+                  value={formData.sessionType}
+                  onChange={handleChange}
+                  className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="lecture">Lecture</option>
+                  <option value="lab">Lab</option>
+                </select>
+              </div>
+            </div>          <div className="grid grid-cols-3 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Day of Week</label>
+              <select
+                name="dayOfWeek"
+                value={formData.dayOfWeek}
+                onChange={handleChange}
+                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'].map(day => (
+                  <option key={day} value={day}>{day}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Start Time</label>
+              <input
+                type="time"
+                name="startTime"
+                value={formData.startTime}
+                onChange={handleChange}
+                required
+                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">End Time</label>
+              <input
+                type="time"
+                name="endTime"
+                value={formData.endTime}
+                onChange={handleChange}
+                required
+                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Room Number</label>
+              <input
+                type="text"
+                name="roomNumber"
+                value={formData.roomNumber}
+                onChange={handleChange}
+                required
+                placeholder="e.g., C-204"
+                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Semester</label>
+              <input
+                type="text"
+                name="semester"
+                value={formData.semester}
+                onChange={handleChange}
+                required
+                placeholder="e.g., VII"
+                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Academic Year</label>
+              <input
+                type="text"
+                name="academicYear"
+                value={formData.academicYear}
+                onChange={handleChange}
+                required
+                placeholder="e.g., 2025-26"
+                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Semester Start</label>
+              <input
+                type="date"
+                name="semesterStartDate"
+                value={formData.semesterStartDate}
+                onChange={handleChange}
+                required
+                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Semester End</label>
+              <input
+                type="date"
+                name="semesterEndDate"
+                value={formData.semesterEndDate}
+                onChange={handleChange}
+                required
+                className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Description (Optional)</label>
+            <textarea
+              name="description"
+              value={formData.description}
+              onChange={handleChange}
+              rows={2}
+              className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="Additional details about this schedule..."
+            />
+          </div>
+
+          <div className="flex justify-end space-x-3 pt-4">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
+            >
+              {isLoading ? 'Creating...' : 'Create Schedule'}
+            </button>
+          </div>
+        </form>
+        )}
+      </div>
     </div>
   );
 };

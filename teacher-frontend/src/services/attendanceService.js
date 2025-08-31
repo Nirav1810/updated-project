@@ -6,6 +6,39 @@ export const attendanceService = {
     const response = await api.post('/api/attendance/mark', attendanceData);
     return response.data;
   },
+
+  // Manual attendance marking
+  markManualAttendance: async (attendanceData) => {
+    const response = await api.post('/api/attendance/manual', attendanceData);
+    return response.data;
+  },
+
+  // Get students for a class (for manual attendance)
+  getStudentsForClass: async (classId) => {
+    const response = await api.get(`/api/attendance/students/${classId}`);
+    return response.data;
+  },
+  
+  // Get all students (temporary for debugging)
+  getAllStudents: async () => {
+    const response = await api.get('/api/attendance/all-students');
+    return response.data;
+  },
+  
+  // Bulk enroll students by email
+  bulkEnrollStudents: async (classId, studentEmails) => {
+    const response = await api.post('/api/attendance/bulk-enroll', {
+      classId,
+      studentEmails
+    });
+    return response.data;
+  },
+  
+  // Get attendance statistics for dashboard
+  getAttendanceStats: async () => {
+    const response = await api.get('/api/attendance/stats');
+    return response.data;
+  },
   
   getAllAttendance: async () => {
     const response = await api.get('/api/attendance');
