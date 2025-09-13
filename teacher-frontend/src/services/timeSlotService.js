@@ -4,12 +4,12 @@ export const timeSlotService = {
   // Get all time slots (public endpoint for when not authenticated)
   getTimeSlots: async () => {
     try {
-      const response = await api.get('/api/timeslots');
+      const response = await api.get('/api/teacher/timeslots');
       return response.data.timeSlots;
     } catch (error) {
       // If authentication fails, try public endpoint
       if (error.response?.status === 401) {
-        const response = await api.get('/api/timeslots/public');
+        const response = await api.get('/api/teacher/timeslots/public');
         return response.data.timeSlots;
       }
       throw error;
@@ -19,12 +19,12 @@ export const timeSlotService = {
   // Get available time slots for scheduling (no breaks)
   getAvailableTimeSlots: async () => {
     try {
-      const response = await api.get('/api/timeslots/available');
+      const response = await api.get('/api/teacher/timeslots/available');
       return response.data.timeSlots;
     } catch (error) {
       // If authentication fails, fallback to public endpoint and filter
       if (error.response?.status === 401) {
-        const response = await api.get('/api/timeslots/public');
+        const response = await api.get('/api/teacher/timeslots/public');
         return response.data.timeSlots.filter(slot => slot.type !== 'break');
       }
       throw error;
@@ -33,31 +33,31 @@ export const timeSlotService = {
 
   // Create a new time slot
   createTimeSlot: async (timeSlotData) => {
-    const response = await api.post('/api/timeslots', timeSlotData);
+    const response = await api.post('/api/teacher/timeslots', timeSlotData);
     return response.data.timeSlot;
   },
 
   // Update a time slot
   updateTimeSlot: async (id, timeSlotData) => {
-    const response = await api.put(`/api/timeslots/${id}`, timeSlotData);
+    const response = await api.put(`/api/teacher/timeslots/${id}`, timeSlotData);
     return response.data.timeSlot;
   },
 
   // Delete a time slot
   deleteTimeSlot: async (id) => {
-    const response = await api.delete(`/api/timeslots/${id}`);
+    const response = await api.delete(`/api/teacher/timeslots/${id}`);
     return response.data;
   },
 
   // Initialize default time slots (try authenticated first, then public)
   initializeDefaultTimeSlots: async () => {
     try {
-      const response = await api.post('/api/timeslots/initialize');
+      const response = await api.post('/api/teacher/timeslots/initialize');
       return response.data.timeSlots;
     } catch (error) {
       // If authentication fails, try public endpoint
       if (error.response?.status === 401) {
-        const response = await api.post('/api/timeslots/initialize-public');
+        const response = await api.post('/api/teacher/timeslots/initialize-public');
         return response.data.timeSlots;
       }
       throw error;

@@ -3,43 +3,43 @@ import api from './api';
 export const recurringScheduleService = {
   // Get all recurring schedules for teacher
   getRecurringSchedules: async () => {
-    const response = await api.get('/api/recurring-schedules');
+    const response = await api.get('/api/teacher/recurring-schedules');
     return response.data;
   },
 
   // Create new recurring schedule
   createRecurringSchedule: async (scheduleData) => {
-    const response = await api.post('/api/recurring-schedules', scheduleData);
+    const response = await api.post('/api/teacher/recurring-schedules', scheduleData);
     return response.data;
   },
 
   // Update recurring schedule
   updateRecurringSchedule: async (id, scheduleData) => {
-    const response = await api.put(`/api/recurring-schedules/${id}`, scheduleData);
+    const response = await api.put(`/api/teacher/recurring-schedules/${id}`, scheduleData);
     return response.data;
   },
 
   // Delete recurring schedule
   deleteRecurringSchedule: async (id) => {
-    const response = await api.delete(`/api/recurring-schedules/${id}`);
+    const response = await api.delete(`/api/teacher/recurring-schedules/${id}`);
     return response.data;
   },
 
   // Get today's schedule
   getTodaysSchedule: async () => {
-    const response = await api.get('/api/recurring-schedules/today');
+    const response = await api.get('/api/teacher/recurring-schedules/today');
     return response.data;
   },
 
   // Get schedule for date range
   getScheduleForDateRange: async (startDate, endDate) => {
-    const response = await api.get(`/api/recurring-schedules/range?startDate=${startDate}&endDate=${endDate}`);
+    const response = await api.get(`/api/teacher/recurring-schedules/range?startDate=${startDate}&endDate=${endDate}`);
     return response.data;
   },
 
   // Create schedule override
   createScheduleOverride: async (overrideData) => {
-    const response = await api.post('/api/recurring-schedules/override', overrideData);
+    const response = await api.post('/api/teacher/recurring-schedules/override', overrideData);
     return response.data;
   }
 };

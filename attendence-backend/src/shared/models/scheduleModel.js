@@ -23,6 +23,10 @@ const scheduleSchema = new mongoose.Schema({
   mergedSessionRange: { type: String }, // Full time range for merged session (e.g., "09:00-11:00")
   linkedMergedSchedule: { type: mongoose.Schema.Types.ObjectId, ref: 'Schedule' }, // Link to other part of merged session
   
+  // Template tracking
+  templateSource: { type: String, enum: ['recurring', 'manual'], default: 'manual' }, // Source of template creation
+  sourceRecurringScheduleId: { type: mongoose.Schema.Types.ObjectId, ref: 'RecurringSchedule' }, // Reference to source recurring schedule
+  
   location: {
     type: { type: String, enum: ['Point'], default: 'Point' },
     coordinates: { type: [Number], default: [72.8311, 21.1591] }, // Surat coordinates

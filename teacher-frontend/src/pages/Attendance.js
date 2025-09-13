@@ -92,11 +92,20 @@ const Attendance = () => {
     }
     
     console.log('Starting session countdown until:', activeSession.sessionExpiresAt);
+    console.log('Current time:', new Date().toISOString());
+    console.log('Session expires at (parsed):', new Date(activeSession.sessionExpiresAt).toISOString());
     
     sessionCountdownInterval.current = setInterval(() => {
       const now = new Date().getTime();
       const expiry = new Date(activeSession.sessionExpiresAt).getTime();
       const difference = expiry - now;
+
+      console.log('Timer calculation:', {
+        now: new Date(now).toISOString(),
+        expiry: new Date(expiry).toISOString(),
+        difference: difference,
+        secondsLeft: Math.floor(difference / 1000)
+      });
 
       if (difference > 0) {
         const secondsLeft = Math.floor(difference / 1000);
@@ -247,6 +256,13 @@ const Attendance = () => {
     {
       onSuccess: (data) => {
         console.log('QR generation response:', data);
+        console.log('Response data structure:', {
+          sessionId: data.sessionId,
+          expiresAt: data.expiresAt,
+          sessionExpiresAt: data.sessionExpiresAt,
+          duration: data.duration,
+          qrPayload: data.qrPayload
+        });
         setActiveSession(data);
         setCurrentQRData(data.qrPayload);
         queryClient.invalidateQueries('activeQRSessions');
@@ -307,15 +323,39 @@ const Attendance = () => {
     {
       onSuccess: (data) => {
         console.log('Manual attendance marked successfully:', data);
-        showAlert('Manual attendance marked successfully!', 'success');
+        console.log('Response details:', {
+          success: data.success,
+          message: data.message,
+          successCount: data.data?.successCount,
+          errorCount: data.data?.errorCount,
+          failed: data.data?.failed
+        });
+        
+        if (data.data?.failed && data.data.failed.length > 0) {
+          console.warn('Some students failed:', data.data.failed);
+          const failedMessages = data.data.failed.map(f => `${f.studentId}: ${f.error}`).join('\n');
+          showAlert(`Partial success: ${data.data.successCount} marked, ${data.data.errorCount} failed\n\nFailed students:\n${failedMessages}`, 'warning');
+        } else {
+          showAlert('Manual attendance marked successfully!', 'success');
+        }
+        
         setSelectedStudents([]);
         setManualNotes('');
         queryClient.invalidateQueries(['students', manualSelectedClass]);
       },
       onError: (error) => {
         console.error('Error marking manual attendance:', error);
+        console.error('Error response:', error?.response?.data);
         const errorMessage = error?.response?.data?.message || 'Failed to mark manual attendance';
-        showAlert(`Error: ${errorMessage}`, 'error');
+        const errorDetails = error?.response?.data?.data?.failed || [];
+        
+        let detailedMessage = `Error: ${errorMessage}`;
+        if (errorDetails.length > 0) {
+          const failedMessages = errorDetails.map(f => `${f.studentId}: ${f.error}`).join('\n');
+          detailedMessage += `\n\nFailed students:\n${failedMessages}`;
+        }
+        
+        showAlert(detailedMessage, 'error');
       }
     }
   );
@@ -691,12 +731,35 @@ const Attendance = () => {
             <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
               <div className="flex items-center justify-between mb-3">
                 <h4 className="font-medium text-yellow-900">Student Enrollment Helper</h4>
-                <button
-                  onClick={() => setShowDebugView(!showDebugView)}
-                  className="text-sm bg-yellow-600 text-white px-3 py-1 rounded hover:bg-yellow-700"
-                >
-                  {showDebugView ? 'Hide' : 'Show'} All Students
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setShowDebugView(!showDebugView)}
+                    className="text-sm bg-yellow-600 text-white px-3 py-1 rounded hover:bg-yellow-700"
+                  >
+                    {showDebugView ? 'Hide' : 'Show'} All Students
+                  </button>
+                  <button
+                    onClick={async () => {
+                      try {
+                        const response = await fetch(`/api/teacher/attendance/debug/class/${manualSelectedClass}`, {
+                          headers: {
+                            'Authorization': `Bearer ${localStorage.getItem('token')}`,
+                            'Content-Type': 'application/json'
+                          }
+                        });
+                        const data = await response.json();
+                        console.log('Debug data:', data);
+                        alert('Debug data logged to console. Check F12 -> Console tab.');
+                      } catch (error) {
+                        console.error('Debug error:', error);
+                        alert('Debug failed: ' + error.message);
+                      }
+                    }}
+                    className="text-sm bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700"
+                  >
+                    Debug Class Data
+                  </button>
+                </div>
               </div>
               
               {showDebugView && (

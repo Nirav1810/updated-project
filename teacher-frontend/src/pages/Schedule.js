@@ -107,7 +107,27 @@ const SchedulePage = () => {
   const { data: recurringSchedules, isLoading: recurringLoading } = useQuery({
     queryKey: ['recurringSchedules'],
     queryFn: recurringScheduleService.getRecurringSchedules,
-    enabled: activeTab === 'semester'
+    enabled: activeTab === 'semester',
+    onSuccess: (data) => {
+      console.log('=== RECURRING SCHEDULES FETCHED ===');
+      console.log('Raw response:', data);
+      console.log('Schedules array:', data?.data);
+      console.log('Number of schedules:', data?.data?.length || 0);
+      if (data?.data) {
+        data.data.forEach((schedule, index) => {
+          console.log(`Schedule ${index + 1}:`, {
+            id: schedule._id,
+            title: schedule.title,
+            dayOfWeek: schedule.dayOfWeek,
+            startTime: schedule.startTime,
+            endTime: schedule.endTime,
+            sessionType: schedule.sessionType,
+            classId: schedule.classId,
+            isActive: schedule.isActive
+          });
+        });
+      }
+    }
   });
 
   // Fetch today's schedule
@@ -233,6 +253,27 @@ const SchedulePage = () => {
     },
     onError: (error) => {
       showAlert(`Error: ${error.response?.data?.message || 'Failed to delete recurring schedule'}`, 'error');
+    }
+  });
+
+  // Create weekly from recurring schedule mutation
+  const createWeeklyFromRecurringMutation = useMutation({
+    mutationFn: recurringScheduleService.createWeeklyFromRecurring,
+    onSuccess: (data) => {
+      showAlert(
+        'Weekly Schedule Created',
+        `Weekly schedule template created successfully from "${data.sourceRecurringSchedule.title}"`,
+        'success'
+      );
+      // Optionally refresh weekly schedules
+      queryClient.invalidateQueries(['weeklySchedule']);
+    },
+    onError: (error) => {
+      showAlert(
+        'Creation Failed',
+        error.response?.data?.message || 'Failed to create weekly schedule',
+        'error'
+      );
     }
   });
 
@@ -391,9 +432,9 @@ const SchedulePage = () => {
       
       // Check if source and dest match this combination (in either order)
       const isValidOrder1 = (sourceStart === slot1.start && sourceEnd === slot1.end && 
-                            destStart === slot2.start && destEnd === slot2.end);
+                             destStart === slot2.start && destEnd === slot2.end);
       const isValidOrder2 = (sourceStart === slot2.start && sourceEnd === slot2.end && 
-                            destStart === slot1.start && destEnd === slot1.end);
+                             destStart === slot1.start && destEnd === slot1.end);
       
       if (isValidOrder1 || isValidOrder2) {
         validCombination = combination;
@@ -694,15 +735,15 @@ const SchedulePage = () => {
                                             {(schedule.roomNumber || schedule.location) && (
                                               <div className="text-xs text-indigo-500">
                                                 📍 {schedule.roomNumber || 
-                                                    (typeof schedule.location === 'string' 
-                                                      ? schedule.location 
-                                                      : 'Room Available')}
+                                                     (typeof schedule.location === 'string' 
+                                                       ? schedule.location 
+                                                       : 'Room Available')}
                                               </div>
                                             )}
                                           </div>
                                           <div className="flex justify-between items-center">
                                             <div className="text-xs text-gray-500">
-                                              {schedule.isMerged ? '� Merged' : '� Drag to merge'}
+                                              {schedule.isMerged ? '✔ Merged' : '↔ Drag to merge'}
                                             </div>
                                             <div className="flex space-x-2">
                                               {schedule.isMerged && (
@@ -758,221 +799,221 @@ const SchedulePage = () => {
         </div>
       </DragDropContext>
 
-      {/* Create Schedule Modal */}
-      {showCreateModal && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-          <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
-            <div className="mt-3">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">
-                Add Schedule
-                {selectedSlot && (
-                  <span className="block text-sm font-normal text-gray-600 mt-1">
-                    📅 {selectedSlot.day.label} | ⏰ {selectedSlot.timeSlot.label}
-                  </span>
-                )}
-              </h3>
-              <form onSubmit={handleCreateSchedule} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Class</label>
-                  <select
-                    value={formData.classId}
-                    onChange={(e) => setFormData({...formData, classId: e.target.value})}
-                    className="block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
-                    required
-                  >
-                    <option value="">
-                      {classesLoading ? 'Loading classes...' : 'Select a class'}
-                    </option>
-                    {classesError && (
-                      <option value="" disabled>Error loading classes</option>
+          {/* Create Schedule Modal */}
+          {showCreateModal && (
+            <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+              <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+                <div className="mt-3">
+                  <h3 className="text-lg font-medium text-gray-900 mb-4">
+                    Add Schedule
+                    {selectedSlot && (
+                      <span className="block text-sm font-normal text-gray-600 mt-1">
+                        📅 {selectedSlot.day.label} | ⏰ {selectedSlot.timeSlot.label}
+                      </span>
                     )}
-                    {classesData && (
-                      // Handle different possible data structures
-                      (Array.isArray(classesData) ? classesData : classesData.data || classesData.classes || [])?.map((cls) => (
-                        <option key={cls._id} value={cls._id}>
-                          {cls.subjectCode || cls.code} - {cls.subjectName || cls.name || cls.subject} 
-                          {cls.semester && ` | Sem ${cls.semester}`}
-                          {cls.classYear && ` | ${cls.classYear}`}
-                          {cls.division && ` | Div ${cls.division}`}
+                  </h3>
+                  <form onSubmit={handleCreateSchedule} className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Class</label>
+                      <select
+                        value={formData.classId}
+                        onChange={(e) => setFormData({...formData, classId: e.target.value})}
+                        className="block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
+                        required
+                      >
+                        <option value="">
+                          {classesLoading ? 'Loading classes...' : 'Select a class'}
                         </option>
-                      ))
-                    )}
-                  </select>
-                  <p className="text-xs text-gray-500 mt-1">
-                    Classes from all semesters and years will be shown
-                    {classesError && <span className="text-red-500"> - Error: {classesError.message}</span>}
-                    {classesData && <span className="text-green-500"> - {(Array.isArray(classesData) ? classesData : classesData.data || classesData.classes || [])?.length || 0} classes found</span>}
-                  </p>
-                </div>
+                        {classesError && (
+                          <option value="" disabled>Error loading classes</option>
+                        )}
+                        {classesData && (
+                          // Handle different possible data structures
+                          (Array.isArray(classesData) ? classesData : classesData.data || classesData.classes || [])?.map((cls) => (
+                            <option key={cls._id} value={cls._id}>
+                              {cls.subjectCode || cls.code} - {cls.subjectName || cls.name || cls.subject} 
+                              {cls.semester && ` | Sem ${cls.semester}`}
+                              {cls.classYear && ` | ${cls.classYear}`}
+                              {cls.division && ` | Div ${cls.division}`}
+                            </option>
+                          ))
+                        )}
+                      </select>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Classes from all semesters and years will be shown
+                        {classesError && <span className="text-red-500"> - Error: {classesError.message}</span>}
+                        {classesData && <span className="text-green-500"> - {(Array.isArray(classesData) ? classesData : classesData.data || classesData.classes || [])?.length || 0} classes found</span>}
+                      </p>
+                    </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Day</label>
-                  <select
-                    value={formData.dayOfWeek}
-                    onChange={(e) => setFormData({...formData, dayOfWeek: e.target.value})}
-                    className="block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
-                    required
-                  >
-                    <option value="">Select a day</option>
-                    {daysOfWeek.map((day) => (
-                      <option key={day.id} value={day.id}>{day.label}</option>
-                    ))}
-                  </select>
-                </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Day</label>
+                      <select
+                        value={formData.dayOfWeek}
+                        onChange={(e) => setFormData({...formData, dayOfWeek: e.target.value})}
+                        className="block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
+                        required
+                      >
+                        <option value="">Select a day</option>
+                        {daysOfWeek.map((day) => (
+                          <option key={day.id} value={day.id}>{day.label}</option>
+                        ))}
+                      </select>
+                    </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Time Slot</label>
-                  <select
-                    value={formData.timeSlotId}
-                    onChange={(e) => setFormData({...formData, timeSlotId: e.target.value})}
-                    className="block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
-                    required
-                  >
-                    <option value="">Select a time slot</option>
-                    {availableTimeSlots.map((slot) => (
-                      <option key={slot._id} value={slot._id}>
-                        {slot.name} ({slot.startTime} - {slot.endTime}) - {slot.type}
-                      </option>
-                    ))}
-                  </select>
-                  <p className="text-xs text-gray-500 mt-1">
-                    {selectedSlot ? (
-                      <span className="text-green-600">✅ Auto-selected from schedule grid</span>
-                    ) : (
-                      <span>💡 For 2-hour lab sessions, create individual periods first, then drag one to another to merge into 2-hour blocks: 9:00-11:00, 11:15-13:15, or 14:00-16:00</span>
-                    )}
-                  </p>
-                </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Time Slot</label>
+                      <select
+                        value={formData.timeSlotId}
+                        onChange={(e) => setFormData({...formData, timeSlotId: e.target.value})}
+                        className="block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
+                        required
+                      >
+                        <option value="">Select a time slot</option>
+                        {availableTimeSlots.map((slot) => (
+                          <option key={slot._id} value={slot._id}>
+                            {slot.name} ({slot.startTime} - {slot.endTime}) - {slot.type}
+                          </option>
+                        ))}
+                      </select>
+                      <p className="text-xs text-gray-500 mt-1">
+                        {selectedSlot ? (
+                          <span className="text-green-600">✅ Auto-selected from schedule grid</span>
+                        ) : (
+                          <span>💡 For 2-hour lab sessions, create individual periods first, then drag one to another to merge into 2-hour blocks: 9:00-11:00, 11:15-13:15, or 14:00-16:00</span>
+                        )}
+                      </p>
+                    </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Room</label>
-                  <select
-                    value={formData.roomId}
-                    onChange={(e) => {
-                      setFormData({...formData, roomId: e.target.value, customRoom: ''});
-                    }}
-                    className="block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 mb-2"
-                  >
-                    <option value="">Select a predefined room</option>
-                    {getAvailableRooms().map((room) => (
-                      <option key={room.id} value={room.id}>
-                        {room.roomNumber} - {room.building} ({room.type})
-                      </option>
-                    ))}
-                  </select>
-                  
-                  <div className="text-sm text-gray-500 mb-2 text-center">OR</div>
-                  
-                  <input
-                    type="text"
-                    value={formData.customRoom}
-                    onChange={(e) => {
-                      setFormData({...formData, customRoom: e.target.value, roomId: ''});
-                    }}
-                    placeholder="Enter custom room (e.g., C-205, Lab-3)"
-                    className="block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
-                  />
-                  <p className="text-xs text-gray-500 mt-1">
-                    Choose from dropdown or enter a custom room number
-                  </p>
-                </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Room</label>
+                      <select
+                        value={formData.roomId}
+                        onChange={(e) => {
+                          setFormData({...formData, roomId: e.target.value, customRoom: ''});
+                        }}
+                        className="block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500 mb-2"
+                      >
+                        <option value="">Select a predefined room</option>
+                        {getAvailableRooms().map((room) => (
+                          <option key={room.id} value={room.id}>
+                            {room.roomNumber} - {room.building} ({room.type})
+                          </option>
+                        ))}
+                      </select>
+                      
+                      <div className="text-sm text-gray-500 mb-2 text-center">OR</div>
+                      
+                      <input
+                        type="text"
+                        value={formData.customRoom}
+                        onChange={(e) => {
+                          setFormData({...formData, customRoom: e.target.value, roomId: ''});
+                        }}
+                        placeholder="Enter custom room (e.g., C-205, Lab-3)"
+                        className="block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">
+                        Choose from dropdown or enter a custom room number
+                      </p>
+                    </div>
 
-                <div className="flex justify-end space-x-3 pt-4">
-                  <button
-                    type="button"
-                    onClick={() => setShowCreateModal(false)}
-                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={createScheduleMutation.isLoading}
-                    className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 border border-transparent rounded-md hover:bg-indigo-700 disabled:opacity-50"
-                  >
-                    {createScheduleMutation.isLoading ? 'Creating...' : 'Create'}
-                  </button>
+                    <div className="flex justify-end space-x-3 pt-4">
+                      <button
+                        type="button"
+                        onClick={() => setShowCreateModal(false)}
+                        className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={createScheduleMutation.isLoading}
+                        className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 border border-transparent rounded-md hover:bg-indigo-700 disabled:opacity-50"
+                      >
+                        {createScheduleMutation.isLoading ? 'Creating...' : 'Create'}
+                      </button>
+                    </div>
+                  </form>
                 </div>
-              </form>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Merge Schedules Modal */}
-      {showMergeModal && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-          <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
-            <div className="mt-3">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">
-                🔗 Merge Schedules
-              </h3>
-              <div className="text-sm text-gray-600 mb-4">
-                You're about to merge two consecutive time slots into one 2-hour session.
               </div>
-              
-              <form onSubmit={handleMergeSubmit} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Session Label
-                  </label>
-                  <input
-                    type="text"
-                    value={mergeData.customLabel}
-                    onChange={(e) => setMergeData({...mergeData, customLabel: e.target.value})}
-                    className="block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
-                    placeholder="e.g., Lab Session, Extended Lecture"
-                    required
-                  />
-                  <p className="text-xs text-gray-500 mt-1">
-                    This label will be displayed for the merged session
-                  </p>
-                </div>
-
-                <div className="bg-blue-50 p-3 rounded-md">
-                  <div className="text-sm font-medium text-blue-700 mb-2">Valid 2-Hour Merge Blocks:</div>
-                  <div className="text-xs text-blue-600">
-                    • 9:00-11:00 (1st + 2nd period)<br/>
-                    • 11:15-13:15 (3rd + 4th period)<br/>
-                    • 14:00-16:00 (5th + 6th period)
-                  </div>
-                </div>
-
-                <div className="bg-gray-50 p-3 rounded-md">
-                  <div className="text-sm font-medium text-gray-700 mb-2">What happens:</div>
-                  <div className="text-sm text-gray-600">
-                    • Two separate time slots will be combined<br/>
-                    • Session type will be set to "Lab"<br/>
-                    • Custom label: "{mergeData.customLabel}"<br/>
-                    • You can split it back later if needed
-                  </div>
-                </div>
-
-                <div className="flex gap-3 pt-4">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowMergeModal(false);
-                      setMergeData({ sourceId: '', targetId: '', customLabel: '' });
-                    }}
-                    className="flex-1 bg-gray-100 text-gray-700 py-3 px-6 rounded-lg hover:bg-gray-200 transition-colors font-medium border border-gray-300"
-                  >
-                    ✕ Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={mergeSchedulesMutation.isLoading}
-                    className="flex-1 bg-purple-600 text-white py-3 px-6 rounded-lg hover:bg-purple-700 disabled:opacity-50 transition-colors font-medium shadow-sm"
-                  >
-                    {mergeSchedulesMutation.isLoading ? 'Merging...' : '🔗 Merge Sessions'}
-                  </button>
-                </div>
-              </form>
             </div>
-          </div>
-        </div>
-      )}
-      </>
+          )}
+
+          {/* Merge Schedules Modal */}
+          {showMergeModal && (
+            <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+              <div className="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+                <div className="mt-3">
+                  <h3 className="text-lg font-medium text-gray-900 mb-4">
+                    🔗 Merge Schedules
+                  </h3>
+                  <div className="text-sm text-gray-600 mb-4">
+                    You're about to merge two consecutive time slots into one 2-hour session.
+                  </div>
+                  
+                  <form onSubmit={handleMergeSubmit} className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Session Label
+                      </label>
+                      <input
+                        type="text"
+                        value={mergeData.customLabel}
+                        onChange={(e) => setMergeData({...mergeData, customLabel: e.target.value})}
+                        className="block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
+                        placeholder="e.g., Lab Session, Extended Lecture"
+                        required
+                      />
+                      <p className="text-xs text-gray-500 mt-1">
+                        This label will be displayed for the merged session
+                      </p>
+                    </div>
+
+                    <div className="bg-blue-50 p-3 rounded-md">
+                      <div className="text-sm font-medium text-blue-700 mb-2">Valid 2-Hour Merge Blocks:</div>
+                      <div className="text-xs text-blue-600">
+                        • 9:00-11:00 (1st + 2nd period)<br/>
+                        • 11:15-13:15 (3rd + 4th period)<br/>
+                        • 14:00-16:00 (5th + 6th period)
+                      </div>
+                    </div>
+
+                    <div className="bg-gray-50 p-3 rounded-md">
+                      <div className="text-sm font-medium text-gray-700 mb-2">What happens:</div>
+                      <div className="text-sm text-gray-600">
+                        • Two separate time slots will be combined<br/>
+                        • Session type will be set to "Lab"<br/>
+                        • Custom label: "{mergeData.customLabel}"<br/>
+                        • You can split it back later if needed
+                      </div>
+                    </div>
+
+                    <div className="flex gap-3 pt-4">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowMergeModal(false);
+                          setMergeData({ sourceId: '', targetId: '', customLabel: '' });
+                        }}
+                        className="flex-1 bg-gray-100 text-gray-700 py-3 px-6 rounded-lg hover:bg-gray-200 transition-colors font-medium border border-gray-300"
+                      >
+                        ✕ Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        disabled={mergeSchedulesMutation.isLoading}
+                        className="flex-1 bg-purple-600 text-white py-3 px-6 rounded-lg hover:bg-purple-700 disabled:opacity-50 transition-colors font-medium shadow-sm"
+                      >
+                        {mergeSchedulesMutation.isLoading ? 'Merging...' : '🔗 Merge Sessions'}
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            </div>
+          )}
+        </>
       )}
 
       {activeTab === 'semester' && (
@@ -1062,13 +1103,72 @@ const SemesterScheduleContent = ({
     { id: '16:15-17:15', start: '16:15', end: '17:15', label: '4:15 PM - 5:15 PM' }
   ];
 
-  // Create a data structure similar to weekly schedule
+  // Helper function to check if a time slot is the first slot of a merged lab session
+  const isFirstSlotOfMergedLab = (schedule, day, timeSlot) => {
+    if (!schedule || schedule.sessionType !== 'lab') {
+      return true; // Not a lab, show normally
+    }
+    
+    // If it's a 2-hour lab, only show in the first time slot
+    const scheduleStart = schedule.startTime;
+    const slotStart = timeSlot.start;
+    
+    return scheduleStart === slotStart;
+  };
+  
+  // Helper function to get the span of a merged lab session
+  const getLabSpanInfo = (schedule, day, timeSlot) => {
+    if (!schedule || schedule.sessionType !== 'lab') {
+      return { shouldShow: true, rowSpan: 1 };
+    }
+    
+    const scheduleStart = schedule.startTime;
+    const scheduleEnd = schedule.endTime;
+    const slotStart = timeSlot.start;
+    
+    // Check if this is a 2-hour lab session
+    const isFirstSlot = scheduleStart === slotStart;
+    
+    if (isFirstSlot) {
+      // Calculate how many slots this lab spans
+      const startSlotIndex = timeSlots.findIndex(slot => slot.start === scheduleStart);
+      const endSlotIndex = timeSlots.findIndex(slot => slot.end === scheduleEnd);
+      const spanCount = endSlotIndex - startSlotIndex + 1;
+      
+      return { shouldShow: true, rowSpan: spanCount > 1 ? spanCount : 1 };
+    } else {
+      // This is a subsequent slot of a merged lab, don't show
+      return { shouldShow: false, rowSpan: 1 };
+    }
+  };
   const getScheduleForSlot = (day, timeSlot) => {
-    return schedulesArray.find(schedule => 
+    // First check for exact time match
+    const exactMatch = schedulesArray.find(schedule => 
       schedule.dayOfWeek === day && 
       schedule.startTime === timeSlot.start && 
       schedule.endTime === timeSlot.end
     );
+    
+    if (exactMatch) {
+      return exactMatch;
+    }
+    
+    // Check for merged lab sessions that span multiple time slots
+    const mergedLabMatch = schedulesArray.find(schedule => {
+      // Check if this time slot is within a merged lab session
+      if (schedule.sessionType === 'lab' && schedule.dayOfWeek === day) {
+        const scheduleStart = schedule.startTime;
+        const scheduleEnd = schedule.endTime;
+        const slotStart = timeSlot.start;
+        const slotEnd = timeSlot.end;
+        
+        // Check if this slot is within the merged lab time range
+        return slotStart >= scheduleStart && slotEnd <= scheduleEnd;
+      }
+      return false;
+    });
+    
+    return mergedLabMatch;
   };
 
   if (recurringLoading) {
@@ -1130,10 +1230,22 @@ const SemesterScheduleContent = ({
                   </td>
                   {days.map((day) => {
                     const schedule = getScheduleForSlot(day, timeSlot);
+                    const spanInfo = getLabSpanInfo(schedule, day, timeSlot);
+                    
+                    // Don't render cell if it's part of a merged lab but not the first slot
+                    if (!spanInfo.shouldShow) {
+                      return null;
+                    }
                     
                     return (
-                      <td key={`${day}-${timeSlot.id}`} className="px-2 py-2 relative">
-                        <div className="min-h-[80px] border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+                      <td 
+                        key={`${day}-${timeSlot.id}`} 
+                        className="px-2 py-2 relative"
+                        rowSpan={spanInfo.rowSpan > 1 ? spanInfo.rowSpan : 1}
+                      >
+                        <div className={`min-h-[80px] border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors ${
+                          spanInfo.rowSpan > 1 ? 'bg-green-50 border-green-200' : ''
+                        }`}>
                           {schedule ? (
                             <div className="p-3 h-full">
                               <div className="flex flex-col h-full">
@@ -1147,14 +1259,21 @@ const SemesterScheduleContent = ({
                                   <div className="text-xs text-gray-500 mb-2">
                                     📍 {schedule.roomNumber}
                                   </div>
-                                  <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${
-                                    schedule.sessionType === 'lecture' ? 'bg-blue-100 text-blue-800' :
-                                    schedule.sessionType === 'lab' ? 'bg-green-100 text-green-800' :
-                                    schedule.sessionType === 'tutorial' ? 'bg-purple-100 text-purple-800' :
-                                    'bg-orange-100 text-orange-800'
-                                  }`}>
-                                    {schedule.sessionType.toUpperCase()}
-                                  </span>
+                                  <div className="flex flex-col gap-1">
+                                    <span className={`inline-block px-2 py-1 rounded-full text-xs font-medium ${
+                                      schedule.sessionType === 'lecture' ? 'bg-blue-100 text-blue-800' :
+                                      schedule.sessionType === 'lab' ? 'bg-green-100 text-green-800' :
+                                      schedule.sessionType === 'tutorial' ? 'bg-purple-100 text-purple-800' :
+                                      'bg-orange-100 text-orange-800'
+                                    }`}>
+                                      {schedule.sessionType.toUpperCase()}
+                                    </span>
+                                    {spanInfo.rowSpan > 1 && (
+                                      <span className="text-xs text-green-600 font-medium">
+                                        {schedule.startTime} - {schedule.endTime}
+                                      </span>
+                                    )}
+                                  </div>
                                 </div>
                                 <div className="mt-2">
                                   <button
@@ -1198,7 +1317,7 @@ const SemesterScheduleContent = ({
       {/* Schedule Statistics */}
       {schedulesArray.length > 0 && (
         <div className="bg-white rounded-lg shadow-md p-6">
-          <h3 className="text-lg font-semibold mb-4">� Schedule Statistics</h3>
+          <h3 className="text-lg font-semibold mb-4">📊 Schedule Statistics</h3>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="text-center">
               <div className="text-2xl font-bold text-blue-600">{schedulesArray.length}</div>
@@ -1230,6 +1349,10 @@ const SemesterScheduleContent = ({
 };
 
 // Create Recurring Schedule Modal Component
+// Fixed: Added comprehensive validation to prevent "Cannot read properties of undefined (reading 'start')" errors
+// - Validates timeSlot objects before accessing start/end properties
+// - Validates array indices to prevent accessing undefined elements
+// - Ensures timeSlot data integrity throughout the component lifecycle
 const CreateRecurringScheduleModal = ({ 
   isOpen, 
   onClose, 
@@ -1242,6 +1365,7 @@ const CreateRecurringScheduleModal = ({
   showConfirm,
   existingSchedules = []
 }) => {
+  const queryClient = useQueryClient(); // <-- FIX: Get queryClient instance
   const [scheduleMode, setScheduleMode] = React.useState('weekly'); // 'single' or 'weekly'
   const [weeklySchedules, setWeeklySchedules] = React.useState({});
   const [globalSettings, setGlobalSettings] = React.useState({
@@ -1264,6 +1388,299 @@ const CreateRecurringScheduleModal = ({
 
   const classesArray = Array.isArray(classes) ? classes : [];
 
+  // Validate timeSlots array on component initialization
+  React.useEffect(() => {
+    const invalidSlots = timeSlots.filter(slot => !slot.id || !slot.start || !slot.end);
+    if (invalidSlots.length > 0) {
+      console.error('Invalid time slots detected:', invalidSlots);
+      showAlert('Configuration Error', 'Some time slots have invalid data. Please refresh the page.', 'error');
+    }
+  }, []);
+
+  // Function to scan and merge existing valid lab blocks
+  const scanAndMergeExistingLabs = React.useCallback(() => {
+    console.log('=== STARTING MERGE SCAN ===');
+    console.log('Current weeklySchedules:', weeklySchedules);
+    console.log('ExistingSchedules:', existingSchedules);
+    
+    const validLabBlocks = [
+      { first: { start: '09:00', end: '10:00' }, second: { start: '10:00', end: '11:00' }, merged: { start: '09:00', end: '11:00' } },
+      { first: { start: '11:15', end: '12:15' }, second: { start: '12:15', end: '13:15' }, merged: { start: '11:15', end: '13:15' } },
+      { first: { start: '14:00', end: '15:00' }, second: { start: '15:00', end: '16:00' }, merged: { start: '14:00', end: '16:00' } }
+    ];
+
+    let totalMerged = 0;
+    let foundExistingCandidates = [];
+    
+    // Check existing saved schedules first
+    if (existingSchedules && existingSchedules.length > 0) {
+      console.log('=== CHECKING EXISTING SCHEDULES ===');
+      
+      days.forEach(day => {
+        validLabBlocks.forEach(block => {
+          const firstSchedule = existingSchedules.find(schedule => 
+            schedule.dayOfWeek === day && 
+            schedule.startTime === block.first.start && 
+            schedule.endTime === block.first.end &&
+            (!schedule.sessionType || schedule.sessionType !== 'lab')
+          );
+          
+          const secondSchedule = existingSchedules.find(schedule => 
+            schedule.dayOfWeek === day && 
+            schedule.startTime === block.second.start && 
+            schedule.endTime === block.second.end &&
+            (!schedule.sessionType || schedule.sessionType !== 'lab')
+          );
+          
+          if (firstSchedule && secondSchedule) {
+            const firstClassId = firstSchedule.classId?._id || firstSchedule.classId;
+            const secondClassId = secondSchedule.classId?._id || secondSchedule.classId;
+            
+            console.log(`Found potential merge on ${day}:`, {
+              first: { id: firstSchedule._id, classId: firstClassId, title: firstSchedule.title },
+              second: { id: secondSchedule._id, classId: secondClassId, title: secondSchedule.title },
+              sameClass: firstClassId === secondClassId
+            });
+            
+            if (firstClassId && secondClassId && firstClassId === secondClassId) {
+              foundExistingCandidates.push({
+                day,
+                block,
+                firstSchedule,
+                secondSchedule,
+                className: firstSchedule.classId?.subjectName || firstSchedule.title
+              });
+            }
+          }
+        });
+      });
+    }
+    
+    // Check weekly schedules for merge opportunities
+    const weeklyKeys = Object.keys(weeklySchedules);
+    if (weeklyKeys.length > 0) {
+      console.log('=== CHECKING WEEKLY SCHEDULES ===');
+      
+      setWeeklySchedules(prevSchedules => {
+        const updated = { ...prevSchedules };
+        let hasChanges = false;
+
+        days.forEach(day => {
+          validLabBlocks.forEach(block => {
+            const firstSlotId = timeSlots.find(slot => slot.start === block.first.start && slot.end === block.first.end)?.id;
+            const secondSlotId = timeSlots.find(slot => slot.start === block.second.start && slot.end === block.second.end)?.id;
+            
+            if (firstSlotId && secondSlotId) {
+              const firstCellKey = `${day}-${firstSlotId}`;
+              const secondCellKey = `${day}-${secondSlotId}`;
+              const firstSchedule = updated[firstCellKey];
+              const secondSchedule = updated[secondCellKey];
+              
+              if (firstSchedule && secondSchedule && 
+                  firstSchedule.classId && secondSchedule.classId &&
+                  firstSchedule.classId === secondSchedule.classId &&
+                  !firstSchedule.isMerged && !secondSchedule.isMerged) {
+                
+                console.log(`Merging weekly schedules on ${day}: ${block.first.start}-${block.second.end}`);
+                
+                updated[firstCellKey] = {
+                  ...firstSchedule,
+                  sessionType: 'lab',
+                  isMerged: true,
+                  mergedWith: secondCellKey,
+                  timeSlot: {
+                    ...firstSchedule.timeSlot,
+                    end: block.merged.end,
+                    label: `${block.merged.start} - ${block.merged.end} (Lab Session)`
+                  }
+                };
+                
+                delete updated[secondCellKey];
+                hasChanges = true;
+                totalMerged++;
+              }
+            }
+          });
+        });
+        
+        return hasChanges ? updated : prevSchedules;
+      });
+    }
+    
+    // Handle results
+    console.log('=== MERGE RESULTS ===');
+    console.log('Existing candidates found:', foundExistingCandidates.length);
+    console.log('Weekly schedules merged:', totalMerged);
+    
+    if (foundExistingCandidates.length > 0) {
+      const mergeList = foundExistingCandidates.map(candidate => 
+        `• ${candidate.day}: ${candidate.className} (${candidate.block.merged.start}-${candidate.block.merged.end})`
+      ).join('\n');
+      
+      showAlert(
+        'Merge Candidates Found',
+        `Found ${foundExistingCandidates.length} existing consecutive session(s) that can be merged into lab blocks:
+
+${mergeList}
+
+To merge existing schedules, you'll need to delete the individual sessions and recreate them as 2-hour lab sessions.`,
+        'info'
+      );
+    } else if (totalMerged === 0) {
+      showAlert(
+        'No Labs to Merge',
+        'No consecutive sessions with the same subject were found in valid 2-hour lab time blocks (9:00-11:00, 11:15-13:15, 14:00-16:00).\n\nMake sure you have consecutive 1-hour sessions for the same subject in these time ranges.',
+        'info'
+      );
+    }
+    
+    if (totalMerged > 0) {
+      showAlert(
+        'Weekly Schedules Merged',
+        `Successfully merged ${totalMerged} consecutive session(s) into 2-hour lab blocks in your weekly schedule.`,
+        'success'
+      );
+    }
+  }, []); // Remove all dependencies to avoid stale closure issues
+
+  // Function to actually merge existing lab sessions via backend API
+  const mergeExistingLabs = React.useCallback(async () => {
+    console.log('=== STARTING ACTUAL MERGE PROCESS ===');
+    console.log('Current existingSchedules:', existingSchedules);
+    
+    const validLabBlocks = [
+      { first: { start: '09:00', end: '10:00' }, second: { start: '10:00', end: '11:00' }, merged: { start: '09:00', end: '11:00' } },
+      { first: { start: '11:15', end: '12:15' }, second: { start: '12:15', end: '13:15' }, merged: { start: '11:15', end: '13:15' } },
+      { first: { start: '14:00', end: '15:00' }, second: { start: '15:00', end: '16:00' }, merged: { start: '14:00', end: '16:00' } }
+    ];
+
+    let mergePromises = [];
+    let foundCandidates = [];
+    
+    // Check existing saved schedules for merge candidates
+    if (existingSchedules && existingSchedules.length > 0) {
+      console.log('=== CHECKING EXISTING SCHEDULES FOR MERGE ===');
+      
+      const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+      
+      days.forEach(day => {
+        validLabBlocks.forEach(block => {
+          const firstSchedule = existingSchedules.find(schedule => 
+            schedule.dayOfWeek === day && 
+            schedule.startTime === block.first.start && 
+            schedule.endTime === block.first.end &&
+            schedule.sessionType !== 'lab'
+          );
+          
+          const secondSchedule = existingSchedules.find(schedule => 
+            schedule.dayOfWeek === day && 
+            schedule.startTime === block.second.start && 
+            schedule.endTime === block.second.end &&
+            schedule.sessionType !== 'lab'
+          );
+          
+          if (firstSchedule && secondSchedule) {
+            const firstClassId = firstSchedule.classId?._id || firstSchedule.classId;
+            const secondClassId = secondSchedule.classId?._id || secondSchedule.classId;
+            
+            console.log(`Found merge candidate on ${day}:`, {
+              first: { id: firstSchedule._id, classId: firstClassId, title: firstSchedule.title },
+              second: { id: secondSchedule._id, classId: secondClassId, title: secondSchedule.title },
+              sameClass: firstClassId === secondClassId
+            });
+            
+            if (firstClassId && secondClassId && firstClassId === secondClassId) {
+              foundCandidates.push({
+                day,
+                block,
+                firstSchedule,
+                secondSchedule,
+                className: firstSchedule.classId?.subjectName || firstSchedule.title
+              });
+              
+              // Prepare merge API call
+              const mergePromise = recurringScheduleService.mergeLabSessions(
+                [firstSchedule._id, secondSchedule._id],
+                `${firstSchedule.classId?.subjectCode || 'LAB'} - ${block.merged.start}-${block.merged.end} Lab Session`
+              );
+              
+              mergePromises.push(mergePromise);
+            }
+          }
+        });
+      });
+    }
+    
+    if (foundCandidates.length === 0) {
+      showAlert(
+        'No Labs to Merge',
+        'No consecutive sessions with the same subject were found in valid 2-hour lab time blocks (9:00-11:00, 11:15-13:15, 14:00-16:00).\n\nMake sure you have consecutive 1-hour sessions for the same subject in these time ranges.',
+        'info'
+      );
+      return;
+    }
+    
+    try {
+      // Show confirmation dialog
+      const candidateList = foundCandidates.map(candidate => 
+        `• ${candidate.day}: ${candidate.className} (${candidate.block.merged.start}-${candidate.block.merged.end})`
+      ).join('\n');
+      
+      const confirmed = await new Promise((resolve) => {
+        showConfirm(
+          `Found ${foundCandidates.length} consecutive session(s) that can be merged into lab blocks:
+
+${candidateList}
+
+Do you want to merge these sessions?`,
+          () => resolve(true),
+          {
+            title: 'Merge Lab Sessions',
+            type: 'info',
+            confirmText: 'Merge Labs',
+            cancelText: 'Cancel',
+            onCancel: () => resolve(false)
+          }
+        );
+      });
+      
+      if (!confirmed) {
+        return;
+      }
+      
+      // Execute all merge operations
+      console.log(`Executing ${mergePromises.length} merge operations...`);
+      const results = await Promise.all(mergePromises);
+      
+      console.log('Merge results:', results);
+      
+      // Refresh the schedules
+      queryClient.invalidateQueries(['recurringSchedules']);
+      queryClient.invalidateQueries(['todaysSchedule']);
+      
+      showAlert(
+        'Lab Sessions Merged',
+        `Successfully merged ${foundCandidates.length} consecutive session(s) into 2-hour lab blocks.`,
+        'success'
+      );
+      
+    } catch (error) {
+      console.error('Merge error:', error);
+      showAlert(
+        'Merge Failed',
+        `Error merging lab sessions: ${error.response?.data?.message || error.message}`,
+        'error'
+      );
+    }
+  }, [existingSchedules, showAlert, showConfirm, queryClient]); // <-- FIX: Add queryClient to dependency array
+
+  // Scan for existing labs when schedules change
+  React.useEffect(() => {
+    if (Object.keys(weeklySchedules).length > 0) {
+      scanAndMergeExistingLabs();
+    }
+  }, []);
+
   // Check for conflicts with existing schedules
   const checkTimeConflict = (day, timeSlot) => {
     return existingSchedules.some(schedule => 
@@ -1284,6 +1701,12 @@ const CreateRecurringScheduleModal = ({
   const handleCellClick = (day, timeSlot) => {
     const cellKey = `${day}-${timeSlot.id}`;
     
+    // Validate timeSlot object
+    if (!timeSlot || !timeSlot.start || !timeSlot.end || !timeSlot.id) {
+      showAlert('Invalid Time Slot', 'Time slot data is incomplete. Please refresh the page and try again.', 'error');
+      return;
+    }
+    
     // Check for conflict with existing schedules
     if (checkTimeConflict(day, timeSlot)) {
       const conflictingSchedule = getConflictingSchedule(day, timeSlot);
@@ -1291,7 +1714,12 @@ const CreateRecurringScheduleModal = ({
       const subjectInfo = conflictingSchedule.classId?.subjectCode ? ` (${conflictingSchedule.classId.subjectCode})` : '';
       showAlert(
         'Schedule Conflict',
-        `You already have a class scheduled on ${day} from ${timeSlot.start} to ${timeSlot.end}${roomInfo}.\n\nExisting Schedule: ${conflictingSchedule.title}${subjectInfo}\nSession Type: ${conflictingSchedule.sessionType}\n\nPlease choose a different time slot.`,
+        `You already have a class scheduled on ${day} from ${timeSlot.start} to ${timeSlot.end}${roomInfo}.
+
+Existing Schedule: ${conflictingSchedule.title}${subjectInfo}
+Session Type: ${conflictingSchedule.sessionType}
+
+Please choose a different time slot.`,
         'warning'
       );
       return;
@@ -1308,12 +1736,17 @@ const CreateRecurringScheduleModal = ({
         // Check if this can be merged with adjacent time slots
         const canMergeWithNext = checkCanMergeTimeSlots(day, timeSlot, prev);
         
-        // Add new schedule slot
+        // Add new schedule slot with validated timeSlot
         return {
           ...prev,
           [cellKey]: {
             day,
-            timeSlot,
+            timeSlot: {
+              id: timeSlot.id,
+              start: timeSlot.start,
+              end: timeSlot.end,
+              label: timeSlot.label
+            },
             classId: '',
             sessionType: 'lecture',
             roomNumber: '',
@@ -1326,27 +1759,40 @@ const CreateRecurringScheduleModal = ({
   };
 
   const checkCanMergeTimeSlots = (day, currentTimeSlot, existingSchedules) => {
+    // Validate input timeSlot
+    if (!currentTimeSlot || !currentTimeSlot.id) {
+      return false;
+    }
+    
     const currentIndex = timeSlots.findIndex(slot => slot.id === currentTimeSlot.id);
+    
+    if (currentIndex === -1) {
+      return false;
+    }
     
     // Check if next slot exists and is selected (regardless of subject)
     if (currentIndex < timeSlots.length - 1) {
       const nextSlot = timeSlots[currentIndex + 1];
-      const nextCellKey = `${day}-${nextSlot.id}`;
-      const nextSchedule = existingSchedules[nextCellKey];
-      
-      if (nextSchedule) {
-        return true;
+      if (nextSlot && nextSlot.id) {
+        const nextCellKey = `${day}-${nextSlot.id}`;
+        const nextSchedule = existingSchedules[nextCellKey];
+        
+        if (nextSchedule) {
+          return true;
+        }
       }
     }
     
     // Check if previous slot exists and is selected (regardless of subject)
     if (currentIndex > 0) {
       const prevSlot = timeSlots[currentIndex - 1];
-      const prevCellKey = `${day}-${prevSlot.id}`;
-      const prevSchedule = existingSchedules[prevCellKey];
-      
-      if (prevSchedule) {
-        return true;
+      if (prevSlot && prevSlot.id) {
+        const prevCellKey = `${day}-${prevSlot.id}`;
+        const prevSchedule = existingSchedules[prevCellKey];
+        
+        if (prevSchedule) {
+          return true;
+        }
       }
     }
     
@@ -1361,37 +1807,50 @@ const CreateRecurringScheduleModal = ({
 
   // Check if consecutive slots can be merged into a lab
   const checkConsecutiveMerge = (day, timeSlot, schedules) => {
+    // Validate input timeSlot
+    if (!timeSlot || !timeSlot.id) {
+      return { canMerge: false };
+    }
+    
     const currentIndex = timeSlots.findIndex(slot => slot.id === timeSlot.id);
+    
+    if (currentIndex === -1) {
+      return { canMerge: false };
+    }
     
     // Check if next slot exists and is selected
     if (currentIndex < timeSlots.length - 1) {
       const nextSlot = timeSlots[currentIndex + 1];
-      const nextCellKey = `${day}-${nextSlot.id}`;
-      const nextSchedule = schedules[nextCellKey];
-      
-      if (nextSchedule && nextSchedule.classId) {
-        return {
-          canMerge: true,
-          nextSlot: nextSlot,
-          nextKey: nextCellKey,
-          mergeType: 'forward'
-        };
+      if (nextSlot && nextSlot.id) {
+        const nextCellKey = `${day}-${nextSlot.id}`;
+        const nextSchedule = schedules[nextCellKey];
+        
+        if (nextSchedule && nextSchedule.classId) {
+          return {
+            canMerge: true,
+            nextSlot: nextSlot,
+            nextKey: nextCellKey,
+            mergeType: 'forward'
+          };
+        }
       }
     }
     
     // Check if previous slot exists and is selected
     if (currentIndex > 0) {
       const prevSlot = timeSlots[currentIndex - 1];
-      const prevCellKey = `${day}-${prevSlot.id}`;
-      const prevSchedule = schedules[prevCellKey];
-      
-      if (prevSchedule && prevSchedule.classId) {
-        return {
-          canMerge: true,
-          prevSlot: prevSlot,
-          prevKey: prevCellKey,
-          mergeType: 'backward'
-        };
+      if (prevSlot && prevSlot.id) {
+        const prevCellKey = `${day}-${prevSlot.id}`;
+        const prevSchedule = schedules[prevCellKey];
+        
+        if (prevSchedule && prevSchedule.classId) {
+          return {
+            canMerge: true,
+            prevSlot: prevSlot,
+            prevKey: prevCellKey,
+            mergeType: 'backward'
+          };
+        }
       }
     }
     
@@ -1400,13 +1859,35 @@ const CreateRecurringScheduleModal = ({
 
   // Handle merging two consecutive slots into a lab
   const handleMergeToLab = (cellKey, day, timeSlot) => {
+    // Validate input parameters
+    if (!cellKey || !day || !timeSlot || !timeSlot.id) {
+      showAlert('Merge Error', 'Invalid parameters for merging time slots', 'error');
+      return;
+    }
+    
     const mergeInfo = checkConsecutiveMerge(day, timeSlot, weeklySchedules);
     
     if (mergeInfo.canMerge) {
       const currentCell = weeklySchedules[cellKey];
       
+      if (!currentCell) {
+        showAlert('Merge Error', 'Current cell data not found', 'error');
+        return;
+      }
+      
       if (mergeInfo.mergeType === 'forward') {
         const nextCell = weeklySchedules[mergeInfo.nextKey];
+        
+        if (!nextCell) {
+          showAlert('Merge Error', 'Adjacent cell data not found', 'error');
+          return;
+        }
+        
+        // Validate slot objects
+        if (!mergeInfo.nextSlot || !mergeInfo.nextSlot.end || !timeSlot.start) {
+          showAlert('Merge Error', 'Invalid time slot data for forward merge', 'error');
+          return;
+        }
         
         // Check if both slots have the same subject
         if (currentCell.classId && nextCell.classId && currentCell.classId === nextCell.classId) {
@@ -1432,12 +1913,23 @@ const CreateRecurringScheduleModal = ({
           
           showAlert(
             'Merged to Lab',
-            `Successfully merged ${timeSlot.label} and ${mergeInfo.nextSlot.label} into a lab session.`,
+            `Successfully merged ${timeSlot.label || timeSlot.id} and ${mergeInfo.nextSlot.label || mergeInfo.nextSlot.id} into a lab session.`,
             'success'
           );
         }
       } else if (mergeInfo.mergeType === 'backward') {
         const prevCell = weeklySchedules[mergeInfo.prevKey];
+        
+        if (!prevCell) {
+          showAlert('Merge Error', 'Previous cell data not found', 'error');
+          return;
+        }
+        
+        // Validate slot objects
+        if (!mergeInfo.prevSlot || !mergeInfo.prevSlot.start || !timeSlot.end) {
+          showAlert('Merge Error', 'Invalid time slot data for backward merge', 'error');
+          return;
+        }
         
         // Check if both slots have the same subject
         if (currentCell.classId && prevCell.classId && currentCell.classId === prevCell.classId) {
@@ -1463,7 +1955,7 @@ const CreateRecurringScheduleModal = ({
           
           showAlert(
             'Merged to Lab',
-            `Successfully merged ${mergeInfo.prevSlot.label} and ${timeSlot.label} into a lab session.`,
+            `Successfully merged ${mergeInfo.prevSlot.label || mergeInfo.prevSlot.id} and ${timeSlot.label || timeSlot.id} into a lab session.`,
             'success'
           );
         }
@@ -1487,118 +1979,130 @@ const CreateRecurringScheduleModal = ({
         const [day, timeSlotId] = cellKey.split('-');
         const currentTimeIndex = timeSlots.findIndex(slot => slot.id === timeSlotId);
         
-        // Check adjacent slots for same class to enable automatic merging
-        let adjacentSlotWithSameClass = null;
-        
-        // Check next slot
-        if (currentTimeIndex < timeSlots.length - 1) {
-          const nextSlot = timeSlots[currentTimeIndex + 1];
-          const nextCellKey = `${day}-${nextSlot.id}`;
-          const nextSchedule = updated[nextCellKey];
-          
-          if (nextSchedule && nextSchedule.classId === value) {
-            adjacentSlotWithSameClass = {
-              type: 'next',
-              slot: nextSlot,
-              key: nextCellKey,
-              schedule: nextSchedule
-            };
-          }
+        // Validate currentTimeIndex before proceeding
+        if (currentTimeIndex === -1) {
+          console.warn('Current time slot not found in timeSlots array:', timeSlotId);
+          return updated;
         }
         
-        // Check previous slot
-        if (currentTimeIndex > 0) {
-          const prevSlot = timeSlots[currentTimeIndex - 1];
-          const prevCellKey = `${day}-${prevSlot.id}`;
-          const prevSchedule = updated[prevCellKey];
+        // Check for automatic lab merging for specific 2-hour blocks
+        const currentSlot = timeSlots[currentTimeIndex];
+        if (currentSlot && currentSlot.start && currentSlot.end) {
+          // Define valid lab blocks
+          const validLabBlocks = [
+            { first: { start: '09:00', end: '10:00' }, second: { start: '10:00', end: '11:00' }, merged: { start: '09:00', end: '11:00' } },
+            { first: { start: '11:15', end: '12:15' }, second: { start: '12:15', end: '13:15' }, merged: { start: '11:15', end: '13:15' } },
+            { first: { start: '14:00', end: '15:00' }, second: { start: '15:00', end: '16:00' }, merged: { start: '14:00', end: '16:00' } }
+          ];
           
-          if (prevSchedule && prevSchedule.classId === value) {
-            adjacentSlotWithSameClass = {
-              type: 'prev',
-              slot: prevSlot,
-              key: prevCellKey,
-              schedule: prevSchedule
-            };
-          }
-        }
-
-        // If we found an adjacent slot with the same class, offer to merge
-        if (adjacentSlotWithSameClass) {
-          // Use setTimeout to show the merge option after state updates
-          setTimeout(() => {
-            const classInfo = classesArray.find(cls => cls._id === value);
-            const subjectName = classInfo ? classInfo.subjectName : 'Selected Subject';
-            
-            showConfirm(
-              `You have selected ${subjectName} for consecutive time slots. Would you like to merge them into a single lab session?`,
-              () => {
-                // Perform the merge
-                if (adjacentSlotWithSameClass.type === 'next') {
-                  const currentSlot = timeSlots[currentTimeIndex];
-                  const nextSlot = adjacentSlotWithSameClass.slot;
+          let wasMerged = false;
+          
+          // Check if current slot is part of a valid lab block
+          for (const block of validLabBlocks) {
+            // Check if this is the first slot of a lab block
+            if (currentSlot.start === block.first.start && currentSlot.end === block.first.end) {
+              // Check if next slot exists and has the same class (new or existing)
+              if (currentTimeIndex < timeSlots.length - 1) {
+                const nextSlot = timeSlots[currentTimeIndex + 1];
+                if (nextSlot && nextSlot.start === block.second.start && nextSlot.end === block.second.end) {
+                  const nextCellKey = `${day}-${nextSlot.id}`;
+                  const nextSchedule = updated[nextCellKey];
                   
-                  setWeeklySchedules(prevSchedules => {
-                    const newSchedules = { ...prevSchedules };
+                  // Check if next slot has the same class (either newly set or already existing)
+                  if (nextSchedule && (nextSchedule.classId === value || nextSchedule.classId)) {
+                    // If next slot has different class, update it to match
+                    if (nextSchedule.classId !== value) {
+                      updated[nextCellKey] = {
+                        ...nextSchedule,
+                        classId: value
+                      };
+                    }
                     
-                    // Update current slot to be a lab with extended time
-                    newSchedules[cellKey] = {
-                      ...newSchedules[cellKey],
+                    // Automatically merge into lab session
+                    updated[cellKey] = {
+                      ...updated[cellKey],
                       sessionType: 'lab',
                       isMerged: true,
-                      mergedWith: adjacentSlotWithSameClass.key,
-                      endTime: nextSlot.end,
-                      timeRange: `${currentSlot.start}-${nextSlot.end}`
+                      mergedWith: nextCellKey,
+                      timeSlot: {
+                        ...updated[cellKey].timeSlot,
+                        end: block.merged.end,
+                        label: `${block.merged.start} - ${block.merged.end} (Lab Session)`
+                      }
                     };
                     
-                    // Remove the next slot
-                    delete newSchedules[adjacentSlotWithSameClass.key];
+                    // Remove the second slot
+                    delete updated[nextCellKey];
+                    wasMerged = true;
                     
-                    return newSchedules;
-                  });
-                  
-                  showAlert(
-                    'Merged to Lab',
-                    `Successfully merged consecutive ${subjectName} slots into a lab session (${currentSlot.start}-${nextSlot.end}).`,
-                    'success'
-                  );
-                } else if (adjacentSlotWithSameClass.type === 'prev') {
-                  const currentSlot = timeSlots[currentTimeIndex];
-                  const prevSlot = adjacentSlotWithSameClass.slot;
-                  
-                  setWeeklySchedules(prevSchedules => {
-                    const newSchedules = { ...prevSchedules };
+                    setTimeout(() => {
+                      const classInfo = classesArray.find(cls => cls._id === value);
+                      const subjectName = classInfo ? classInfo.subjectName : 'Selected Subject';
+                      showAlert(
+                        'Auto-Merged to Lab',
+                        `${subjectName} sessions automatically merged into a 2-hour lab (${block.merged.start}-${block.merged.end}).`,
+                        'success'
+                      );
+                    }, 100);
                     
-                    // Update previous slot to be a lab with extended time
-                    newSchedules[adjacentSlotWithSameClass.key] = {
-                      ...newSchedules[adjacentSlotWithSameClass.key],
+                    break;
+                  }
+                }
+              }
+            }
+            
+            // Check if this is the second slot of a lab block
+            if (!wasMerged && currentSlot.start === block.second.start && currentSlot.end === block.second.end) {
+              // Check if previous slot exists and has the same class (new or existing)
+              if (currentTimeIndex > 0) {
+                const prevSlot = timeSlots[currentTimeIndex - 1];
+                if (prevSlot && prevSlot.start === block.first.start && prevSlot.end === block.first.end) {
+                  const prevCellKey = `${day}-${prevSlot.id}`;
+                  const prevSchedule = updated[prevCellKey];
+                  
+                  // Check if previous slot has the same class (either newly set or already existing)
+                  if (prevSchedule && (prevSchedule.classId === value || prevSchedule.classId)) {
+                    // If previous slot has different class, update it to match
+                    if (prevSchedule.classId !== value) {
+                      updated[prevCellKey] = {
+                        ...prevSchedule,
+                        classId: value
+                      };
+                    }
+                    
+                    // Automatically merge into lab session
+                    updated[prevCellKey] = {
+                      ...updated[prevCellKey],
                       sessionType: 'lab',
                       isMerged: true,
                       mergedWith: cellKey,
-                      endTime: currentSlot.end,
-                      timeRange: `${prevSlot.start}-${currentSlot.end}`
+                      timeSlot: {
+                        ...updated[prevCellKey].timeSlot,
+                        end: block.merged.end,
+                        label: `${block.merged.start} - ${block.merged.end} (Lab Session)`
+                      }
                     };
                     
                     // Remove the current slot
-                    delete newSchedules[cellKey];
+                    delete updated[cellKey];
+                    wasMerged = true;
                     
-                    return newSchedules;
-                  });
-                  
-                  showAlert(
-                    'Merged to Lab',
-                    `Successfully merged consecutive ${subjectName} slots into a lab session (${prevSlot.start}-${currentSlot.end}).`,
-                    'success'
-                  );
+                    setTimeout(() => {
+                      const classInfo = classesArray.find(cls => cls._id === value);
+                      const subjectName = classInfo ? classInfo.subjectName : 'Selected Subject';
+                      showAlert(
+                        'Auto-Merged to Lab',
+                        `${subjectName} sessions automatically merged into a 2-hour lab (${block.merged.start}-${block.merged.end}).`,
+                        'success'
+                      );
+                    }, 100);
+                    
+                    break;
+                  }
                 }
-              },
-              {
-                title: 'Merge to Lab Session?',
-                type: 'info',
-                confirmText: 'Merge to Lab',
-                cancelText: 'Keep Separate'
               }
-            );
-          }, 100);
+            }
+          }
         }
       }
 
@@ -1624,16 +2128,25 @@ const CreateRecurringScheduleModal = ({
       return;
     }
 
-    const schedulesData = schedules.map(schedule => ({
-      classId: schedule.classId,
-      sessionType: schedule.sessionType,
-      dayOfWeek: schedule.day,
-      startTime: schedule.timeSlot.start,
-      endTime: schedule.timeSlot.end,
-      roomNumber: schedule.roomNumber.trim(),
-      description: schedule.description || '',
-      ...globalSettings
-    }));
+    const schedulesData = schedules.map(schedule => {
+      // Validate timeSlot before accessing properties
+      if (!schedule.timeSlot || !schedule.timeSlot.start || !schedule.timeSlot.end) {
+        console.error('Invalid timeSlot data for schedule:', schedule);
+        throw new Error('Schedule contains invalid time slot data');
+      }
+      
+      return {
+        classId: schedule.classId,
+        sessionType: schedule.sessionType,
+        dayOfWeek: schedule.day,
+        startTime: schedule.timeSlot.start,
+        endTime: schedule.timeSlot.end,
+        roomNumber: schedule.roomNumber.trim(),
+        description: schedule.description || '',
+        title: schedule.isMerged ? `${schedule.sessionType} Session` : undefined,
+        ...globalSettings
+      };
+    });
 
     // Use the mutation to create multiple schedules
     onSubmit(schedulesData);
@@ -1693,6 +2206,87 @@ const CreateRecurringScheduleModal = ({
 
         {scheduleMode === 'weekly' ? (
           <div className="space-y-6">
+            {/* Lab Auto-Merge Information */}
+            <div className="bg-gradient-to-r from-green-50 to-blue-50 border border-green-200 rounded-lg p-4">
+              <div className="flex items-start justify-between">
+                <div className="flex items-start space-x-3">
+                  <div className="text-green-500 text-xl">🔬</div>
+                  <div>
+                    <h3 className="font-semibold text-green-900 mb-1">Automatic Lab Merging Enabled</h3>
+                    <p className="text-sm text-green-700">
+                      When you select the same subject for consecutive time slots in these ranges, they will automatically merge into 2-hour lab sessions:
+                    </p>
+                    <div className="flex flex-wrap gap-2 mt-2">
+                      <span className="bg-green-100 text-green-800 px-2 py-1 rounded text-xs font-medium">9:00-11:00</span>
+                      <span className="bg-green-100 text-green-800 px-2 py-1 rounded text-xs font-medium">11:15-13:15</span>
+                      <span className="bg-green-100 text-green-800 px-2 py-1 rounded text-xs font-medium">14:00-16:00</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={mergeExistingLabs}
+                    className="bg-green-600 hover:bg-green-700 text-white text-xs px-3 py-1 rounded-md font-medium"
+                    title="Scan and merge existing consecutive lab sessions"
+                  >
+                    🔄 Merge Existing
+                  </button>
+                  <button
+                    onClick={() => {
+                      console.log('=== DETAILED DEBUG INFO ===');
+                      console.log('Current weeklySchedules:', weeklySchedules);
+                      console.log('Number of schedules:', Object.keys(weeklySchedules).length);
+                      console.log('ExistingSchedules:', existingSchedules);
+                      console.log('Number of existing:', existingSchedules?.length || 0);
+                      console.log('TimeSlots:', timeSlots);
+                      console.log('Days:', days);
+                      
+                      // Check each time slot mapping
+                      console.log('\n=== TIME SLOT ANALYSIS ===');
+                      timeSlots.forEach(slot => {
+                        console.log(`Slot: ${slot.id} (${slot.start}-${slot.end})`);
+                      });
+                      
+                      // Check existing schedules in detail
+                      console.log('\n=== EXISTING SCHEDULES ANALYSIS ===');
+                      if (existingSchedules && existingSchedules.length > 0) {
+                        existingSchedules.forEach((schedule, index) => {
+                          console.log(`Existing Schedule ${index}:`, {
+                            id: schedule._id,
+                            title: schedule.title,
+                            dayOfWeek: schedule.dayOfWeek,
+                            startTime: schedule.startTime,
+                            endTime: schedule.endTime,
+                            sessionType: schedule.sessionType,
+                            classId: schedule.classId,
+                            className: schedule.classId?.subjectName
+                          });
+                        });
+                      } else {
+                        console.log('No existing schedules found');
+                      }
+                      
+                      // Check weekly schedules in detail
+                      console.log('\n=== WEEKLY SCHEDULES ANALYSIS ===');
+                      Object.entries(weeklySchedules).forEach(([key, schedule]) => {
+                        console.log(`Key: ${key}`);
+                        console.log(`Schedule:`, {
+                          classId: schedule.classId,
+                          sessionType: schedule.sessionType,
+                          isMerged: schedule.isMerged,
+                          timeSlot: schedule.timeSlot,
+                          day: schedule.day
+                        });
+                      });
+                    }}
+                    className="bg-blue-600 hover:bg-blue-700 text-white text-xs px-2 py-1 rounded-md font-medium"
+                    title="Debug current state"
+                  >
+                    🐛 Debug
+                  </button>
+                </div>
+              </div>
+            </div>
             {/* Global Settings */}
             <div className="bg-gray-50 rounded-lg p-4">
               <h3 className="text-lg font-medium mb-4">Semester Settings</h3>
@@ -1825,7 +2419,7 @@ const CreateRecurringScheduleModal = ({
                                     <div className="flex justify-between items-center mb-2">
                                       <span className="text-xs text-gray-600">
                                         {cellData.isMerged && cellData.sessionType === 'lab' ? (
-                                          <span className="text-blue-600 font-medium">🔬 Lab Session</span>
+                                          <span className="text-green-600 font-bold">🔬 2-Hour Lab</span>
                                         ) : (
                                           "Click to remove"
                                         )}
@@ -1842,14 +2436,14 @@ const CreateRecurringScheduleModal = ({
                                     </div>
                                     
                                     {/* Show extended time for merged sessions */}
-                                    {cellData.isMerged && cellData.timeRange && (
-                                      <div className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
-                                        Extended: {cellData.timeRange}
+                                    {cellData.isMerged && cellData.sessionType === 'lab' && (
+                                      <div className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded font-medium mb-2">
+                                        {cellData.timeSlot?.label || `${cellData.timeSlot?.start} - ${cellData.timeSlot?.end}`}
                                       </div>
                                     )}
                                     
                                     <select
-                                      value={cellData.classId}
+                                      value={cellData.classId || ''}
                                       onChange={(e) => updateCellData(cellKey, 'classId', e.target.value)}
                                       className="w-full text-xs border border-gray-300 rounded px-2 py-1"
                                       onClick={(e) => e.stopPropagation()}
@@ -1863,7 +2457,7 @@ const CreateRecurringScheduleModal = ({
                                     </select>
                                     
                                     <select
-                                      value={cellData.sessionType}
+                                      value={cellData.sessionType || 'lecture'}
                                       onChange={(e) => updateCellData(cellKey, 'sessionType', e.target.value)}
                                       className="w-full text-xs border border-gray-300 rounded px-2 py-1"
                                       onClick={(e) => e.stopPropagation()}
@@ -1877,7 +2471,7 @@ const CreateRecurringScheduleModal = ({
                                     <input
                                       type="text"
                                       placeholder="Room (Required)"
-                                      value={cellData.roomNumber}
+                                      value={cellData.roomNumber || ''}
                                       onChange={(e) => updateCellData(cellKey, 'roomNumber', e.target.value)}
                                       className={`w-full text-xs border rounded px-2 py-1 ${
                                         cellData.roomNumber && cellData.roomNumber.trim() 
@@ -1945,7 +2539,7 @@ const CreateRecurringScheduleModal = ({
                 className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
               >
                 {isLoading ? 'Creating Schedules...' : 
-                 `Create ${Object.values(weeklySchedules).filter(s => s.classId && s.roomNumber && s.roomNumber.trim()).length} Schedule(s)`}
+                  `Create ${Object.values(weeklySchedules).filter(s => s.classId && s.roomNumber && s.roomNumber.trim()).length} Schedule(s)`}
               </button>
             </div>
           </div>

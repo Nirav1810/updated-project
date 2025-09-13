@@ -2,11 +2,11 @@ import api from './api';
 
 export const scheduleService = {
   // Basic CRUD operations
-  getSchedules: () => api.get('/api/schedules'),
-  getScheduleById: (id) => api.get(`/api/schedules/${id}`),
-  createSchedule: (scheduleData) => api.post('/api/schedules', scheduleData),
-  updateSchedule: (id, scheduleData) => api.put(`/api/schedules/${id}`, scheduleData),
-  deleteSchedule: (id) => api.delete(`/api/schedules/${id}`),
+  getSchedules: () => api.get('/api/teacher/schedules'),
+  getScheduleById: (id) => api.get(`/api/teacher/schedules/${id}`),
+  createSchedule: (scheduleData) => api.post('/api/teacher/schedules', scheduleData),
+  updateSchedule: (id, scheduleData) => api.put(`/api/teacher/schedules/${id}`, scheduleData),
+  deleteSchedule: (id) => api.delete(`/api/teacher/schedules/${id}`),
 
   // Enhanced schedule operations
   getTeacherSchedule: (params = {}) => {
@@ -15,10 +15,10 @@ export const scheduleService = {
     if (params.semester) queryParams.append('semester', params.semester);
     if (params.academicYear) queryParams.append('academicYear', params.academicYear);
     
-    return api.get(`/api/schedules/teacher?${queryParams}`);
+    return api.get(`/api/teacher/schedules/teacher?${queryParams}`);
   },
 
-  getTodaySchedule: () => api.get('/api/schedules/today'),
+  getTodaySchedule: () => api.get('/api/teacher/schedules/today'),
 
   getWeeklySchedule: (params = {}) => {
     const queryParams = new URLSearchParams();
@@ -26,12 +26,12 @@ export const scheduleService = {
     if (params.semester) queryParams.append('semester', params.semester);
     if (params.academicYear) queryParams.append('academicYear', params.academicYear);
     
-    return api.get(`/api/schedules/weekly?${queryParams}`);
+    return api.get(`/api/teacher/schedules/weekly?${queryParams}`);
   },
 
-  createBulkSchedules: (schedulesData) => api.post('/api/schedules/bulk', schedulesData),
+  createBulkSchedules: (schedulesData) => api.post('/api/teacher/schedules/bulk', schedulesData),
 
-  checkScheduleConflict: (scheduleData) => api.post('/api/schedules/check-conflict', scheduleData),
+  checkScheduleConflict: (scheduleData) => api.post('/api/teacher/schedules/check-conflict', scheduleData),
 
   // Time slot utilities
   getTimeSlots: () => {
@@ -71,12 +71,12 @@ export const scheduleService = {
 
   // Merge and split operations
   mergeSchedules: (sourceScheduleId, targetScheduleId, customLabel) => 
-    api.post('/api/schedules/merge', { 
+    api.post('/api/teacher/schedules/merge', { 
       sourceScheduleId, 
       targetScheduleId, 
       customLabel 
     }),
 
   splitSchedule: (scheduleId) => 
-    api.post(`/api/schedules/split/${scheduleId}`),
+    api.post(`/api/teacher/schedules/split/${scheduleId}`),
 };

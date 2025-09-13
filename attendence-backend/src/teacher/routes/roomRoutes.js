@@ -1,5 +1,5 @@
 import express from 'express';
-import { protect } from '../middleware/authMiddleware.js';
+import { protect } from '../../shared/middleware/authMiddleware.js';
 import {
   getRooms,
   createRoom,

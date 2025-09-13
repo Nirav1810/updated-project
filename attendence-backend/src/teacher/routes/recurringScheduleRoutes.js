@@ -8,7 +8,7 @@ import {
   updateRecurringSchedule,
   deleteRecurringSchedule
 } from '../controllers/recurringScheduleController.js';
-import { protect, teacher } from '../middleware/authMiddleware.js';
+import { protect, teacher } from '../../shared/middleware/authMiddleware.js';
 
 const router = express.Router();
 

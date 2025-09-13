@@ -1,5 +1,5 @@
-import { RecurringSchedule, ScheduleOverride, ScheduleInstance } from '../models/recurringScheduleModel.js';
-import { Class } from '../models/classModel.js';
+import { RecurringSchedule, ScheduleOverride, ScheduleInstance } from '../../shared/models/recurringScheduleModel.js';
+import { Class } from '../../shared/models/classModel.js';
 
 // Create a recurring schedule for the semester
 export const createRecurringSchedule = async (req, res) => {

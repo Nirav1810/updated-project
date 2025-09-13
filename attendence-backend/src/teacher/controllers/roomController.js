@@ -1,5 +1,5 @@
-import { Room } from '../models/roomModel.js';
-import { Schedule } from '../models/scheduleModel.js';
+import { Room } from '../../shared/models/roomModel.js';
+import { Schedule } from '../../shared/models/scheduleModel.js';
 
 // Get all rooms
 export const getRooms = async (req, res) => {

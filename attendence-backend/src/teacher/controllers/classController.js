@@ -1,6 +1,6 @@
-import { Class } from '../models/classModel.js';
-import { ClassEnrollment } from '../models/classEnrollmentModel.js';
-import { User } from '../models/userModel.js';
+import { Class } from '../../shared/models/classModel.js';
+import { ClassEnrollment } from '../../shared/models/classEnrollmentModel.js';
+import { User } from '../../shared/models/userModel.js';
 // Basic CRUD for Classes
 export const createClass = async (req, res) => {
   console.log('Create class request received:', req.body);
@@ -99,7 +99,7 @@ export const deleteClass = async (req, res) => {
     // Note: We'll do a soft cascade by removing related records
     try {
       // Delete related schedules (if Schedule model is available)
-      const { Schedule } = await import('../models/scheduleModel.js');
+      const { Schedule } = await import('../../shared/models/scheduleModel.js');
       await Schedule.deleteMany({ classId: req.params.id });
       console.log('Related schedules deleted for class:', req.params.id);
     } catch (scheduleError) {

@@ -1,5 +1,5 @@
-import { Schedule } from '../models/scheduleModel.js';
-import { Class } from '../models/classModel.js';
+import { Schedule } from '../../shared/models/scheduleModel.js';
+import { Class } from '../../shared/models/classModel.js';
 
 // Get teacher's weekly schedule
 export const getTeacherSchedule = async (req, res) => {

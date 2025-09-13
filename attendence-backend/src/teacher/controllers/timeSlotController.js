@@ -1,5 +1,5 @@
-import { TimeSlot } from '../models/timeSlotModel.js';
-import { Schedule } from '../models/scheduleModel.js';
+import { TimeSlot } from '../../shared/models/timeSlotModel.js';
+import { Schedule } from '../../shared/models/scheduleModel.js';
 
 // Get all time slots
 export const getTimeSlots = async (req, res) => {

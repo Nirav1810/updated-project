@@ -38,11 +38,12 @@ const ClassReports = () => {
   // Fetch attendance records for this class
   const { data: attendanceData, isLoading: attendanceLoading } = useQuery(
     ['classAttendance', id, selectedPeriod, dateRange],
-    () => attendanceService.getAttendanceByClass(id),
+    () => attendanceService.getAttendanceByClass(id, dateRange.startDate, dateRange.endDate),
     {
       enabled: !!id,
       onSuccess: (data) => {
         console.log('Attendance data received:', data);
+        console.log('Date range used:', dateRange);
       },
       onError: (error) => {
         console.error('Error fetching attendance:', error);
@@ -52,7 +53,11 @@ const ClassReports = () => {
 
   // Calculate attendance statistics
   const calculateAttendanceStats = () => {
+    console.log('Raw attendanceData:', attendanceData);
+    console.log('Raw studentsData:', studentsData);
+    
     if (!attendanceData || !studentsData) {
+      console.log('Missing data - attendanceData:', !!attendanceData, 'studentsData:', !!studentsData);
       return {
         overall: {
           totalClasses: 0,
@@ -66,7 +71,33 @@ const ClassReports = () => {
     }
 
     const students = studentsData?.data || studentsData?.students || [];
-    const attendance = attendanceData?.data || attendanceData || [];
+    const attendance = attendanceData?.data?.attendance || attendanceData?.attendance || attendanceData?.data || attendanceData || [];
+
+    // Ensure attendance is an array
+    if (!Array.isArray(attendance)) {
+      console.warn('Attendance data is not an array:', attendance);
+      return {
+        overall: {
+          totalClasses: 0,
+          averageAttendance: 0,
+          totalStudents: students.length,
+          presentToday: 0
+        },
+        students: students.map(student => ({
+          _id: student._id,
+          name: student.name,
+          enrollmentNo: student.enrollmentNo,
+          attendanceRate: 0,
+          totalPresent: 0,
+          totalClasses: 0,
+          lastAttended: 'Never'
+        })),
+        trends: []
+      };
+    }
+
+    console.log('Extracted students:', students.length);
+    console.log('Extracted attendance records:', attendance.length);
 
     // Group attendance by date to count total classes
     const classesByDate = {};
@@ -119,19 +150,102 @@ const ClassReports = () => {
     const totalAttendanceRate = studentStats.reduce((sum, student) => sum + student.attendanceRate, 0);
     const averageAttendance = students.length > 0 ? totalAttendanceRate / students.length : 0;
 
-    // Calculate daily trends (last 7 days)
+    // Calculate daily trends based on selected period
     const trends = [];
-    for (let i = 6; i >= 0; i--) {
-      const date = new Date();
-      date.setDate(date.getDate() - i);
-      const dateString = date.toDateString();
-      const dayAttendance = classesByDate[dateString]?.size || 0;
-      const attendanceRate = students.length > 0 ? (dayAttendance / students.length) * 100 : 0;
-      
-      trends.push({
-        date: date.toISOString().split('T')[0],
-        attendance: Math.round(attendanceRate)
-      });
+    let trendDays;
+    
+    switch (selectedPeriod) {
+      case 'week':
+        trendDays = 7;
+        break;
+      case 'month':
+        trendDays = 30;
+        break;
+      case 'semester':
+        trendDays = 120;
+        break;
+      default:
+        trendDays = 7;
+    }
+    
+    // For week: show daily trends, for month: show weekly trends, for semester: show monthly trends
+    if (selectedPeriod === 'week') {
+      // Daily trends for the past week
+      for (let i = 6; i >= 0; i--) {
+        const date = new Date();
+        date.setDate(date.getDate() - i);
+        const dateString = date.toDateString();
+        const dayAttendance = classesByDate[dateString]?.size || 0;
+        const attendanceRate = students.length > 0 ? (dayAttendance / students.length) * 100 : 0;
+        
+        trends.push({
+          date: date.toISOString().split('T')[0],
+          attendance: Math.round(attendanceRate)
+        });
+      }
+    } else if (selectedPeriod === 'month') {
+      // Weekly trends for the past month (4 weeks)
+      for (let i = 3; i >= 0; i--) {
+        const weekStart = new Date();
+        weekStart.setDate(weekStart.getDate() - (i * 7));
+        const weekEnd = new Date(weekStart);
+        weekEnd.setDate(weekStart.getDate() + 6);
+        
+        let weekAttendance = 0;
+        let weekDays = 0;
+        
+        for (let j = 0; j < 7; j++) {
+          const checkDate = new Date(weekStart);
+          checkDate.setDate(weekStart.getDate() + j);
+          const dateString = checkDate.toDateString();
+          if (classesByDate[dateString]) {
+            weekAttendance += classesByDate[dateString].size;
+            weekDays++;
+          }
+        }
+        
+        const avgAttendance = weekDays > 0 && students.length > 0 
+          ? (weekAttendance / (weekDays * students.length)) * 100 
+          : 0;
+        
+        trends.push({
+          date: weekStart.toISOString().split('T')[0],
+          attendance: Math.round(avgAttendance),
+          label: `Week ${4 - i}`
+        });
+      }
+    } else {
+      // Monthly trends for the semester (4 months)
+      for (let i = 3; i >= 0; i--) {
+        const monthStart = new Date();
+        monthStart.setMonth(monthStart.getMonth() - i);
+        monthStart.setDate(1);
+        const monthEnd = new Date(monthStart);
+        monthEnd.setMonth(monthStart.getMonth() + 1);
+        monthEnd.setDate(0);
+        
+        let monthAttendance = 0;
+        let monthDays = 0;
+        
+        // Count attendance for all days in the month
+        for (const [dateString, attendees] of Object.entries(classesByDate)) {
+          const checkDate = new Date(dateString);
+          if (checkDate >= monthStart && checkDate <= monthEnd) {
+            monthAttendance += attendees.size;
+            monthDays++;
+          }
+        }
+        
+        const avgAttendance = monthDays > 0 && students.length > 0 
+          ? (monthAttendance / (monthDays * students.length)) * 100 
+          : 0;
+        
+        trends.push({
+          date: monthStart.toISOString().split('T')[0],
+          attendance: Math.round(avgAttendance),
+          label: monthStart.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+        });
+      }
     }
 
     return {
@@ -390,6 +504,9 @@ const ClassReports = () => {
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Attendance Reports</h1>
           <p className="text-gray-600">{classData?.subjectName} - {classData?.subjectCode}</p>
+          <p className="text-sm text-gray-500 mt-1">
+            Showing data from {new Date(dateRange.startDate).toLocaleDateString()} to {new Date(dateRange.endDate).toLocaleDateString()}
+          </p>
         </div>
         
         {/* Period Filter */}
@@ -444,21 +561,26 @@ const ClassReports = () => {
 
       {/* Attendance Trend Chart */}
       <div className="bg-white p-6 rounded-lg shadow mb-8">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">Attendance Trend (Last 7 Days)</h3>
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">
+          Attendance Trend 
+          {selectedPeriod === 'week' && '(Daily - Last 7 Days)'}
+          {selectedPeriod === 'month' && '(Weekly - Last 4 Weeks)'}
+          {selectedPeriod === 'semester' && '(Monthly - Last 4 Months)'}
+        </h3>
         {stats.trends.some(day => day.attendance > 0) ? (
           <div className="flex items-end space-x-2 h-40">
-            {stats.trends.map((day, index) => (
+            {stats.trends.map((trend, index) => (
               <div key={index} className="flex-1 flex flex-col items-center">
                 <div 
                   className="bg-blue-500 rounded-t-md w-full transition-all duration-300 hover:bg-blue-600"
-                  style={{ height: `${Math.max(day.attendance, 5)}%` }}
-                  title={`${day.attendance}% attendance`}
+                  style={{ height: `${Math.max(trend.attendance, 5)}%` }}
+                  title={`${trend.attendance}% attendance`}
                 ></div>
                 <div className="text-xs text-gray-500 mt-2">
-                  {formatDate(day.date)}
+                  {trend.label || formatDate(trend.date)}
                 </div>
                 <div className="text-xs font-medium text-gray-700">
-                  {day.attendance}%
+                  {trend.attendance}%
                 </div>
               </div>
             ))}

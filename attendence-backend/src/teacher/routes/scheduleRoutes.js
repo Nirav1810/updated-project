@@ -12,7 +12,7 @@ import {
   mergeSchedules,
   splitSchedule
 } from '../controllers/scheduleController.js';
-import { protect, teacher } from '../middleware/authMiddleware.js';
+import { protect, teacher } from '../../shared/middleware/authMiddleware.js';
 
 const router = express.Router();
 
