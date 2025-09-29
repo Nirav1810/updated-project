@@ -6,6 +6,13 @@ import connectDB from './src/shared/config/db.js';
 // Import student routes
 import studentAuthRoutes from './src/student/routes/authRoutes.js';
 
+// Import unified routes (for mobile app)
+import unifiedAuthRoutes from './src/shared/routes/unifiedAuthRoutes.js';
+import unifiedClassRoutes from './src/shared/routes/unifiedClassRoutes.js';
+import unifiedAttendanceRoutes from './src/shared/routes/unifiedAttendanceRoutes.js';
+import unifiedUserRoutes from './src/shared/routes/unifiedUserRoutes.js';
+import unifiedTimeSlotRoutes from './src/shared/routes/unifiedTimeSlotRoutes.js';
+import qrRoutes from './src/shared/routes/qrRoutes.js';
 
 // Import teacher routes
 import teacherAuthRoutes from './src/teacher/routes/authRoutes.js';
@@ -40,6 +47,14 @@ app.post('/test', (req, res) => {
 
 // Use API Routes
 
+// Unified routes (for mobile app)
+app.use('/api/auth', unifiedAuthRoutes);
+app.use('/api/classes', unifiedClassRoutes);
+app.use('/api/attendances', unifiedAttendanceRoutes);
+app.use('/api/users', unifiedUserRoutes);
+app.use('/api/timeslots', unifiedTimeSlotRoutes);
+app.use('/api/qr', qrRoutes);
+
 // Student routes
 app.use('/api/student/auth', studentAuthRoutes);
 
@@ -54,6 +69,14 @@ app.use('/api/teacher/timeslots', teacherTimeSlotRoutes);
 app.use('/api/teacher/rooms', teacherRoomRoutes);
 
 console.log('Routes registered:');
+console.log('Unified routes (for mobile app):');
+console.log('- /api/auth');
+console.log('- /api/classes');
+console.log('- /api/attendances');
+console.log('- /api/users');
+console.log('- /api/timeslots');
+console.log('- /api/qr');
+
 console.log('Student routes:');
 console.log('- /api/student/auth');
 

@@ -1683,19 +1683,43 @@ Do you want to merge these sessions?`,
 
   // Check for conflicts with existing schedules
   const checkTimeConflict = (day, timeSlot) => {
-    return existingSchedules.some(schedule => 
-      schedule.dayOfWeek === day && 
-      schedule.startTime === timeSlot.start && 
-      schedule.endTime === timeSlot.end
-    );
+    return existingSchedules.some(schedule => {
+      if (schedule.dayOfWeek !== day) return false;
+      
+      // Parse time strings to minutes for easier comparison
+      const parseTime = (timeStr) => {
+        const [hours, minutes] = timeStr.split(':').map(Number);
+        return hours * 60 + minutes;
+      };
+      
+      const scheduleStart = parseTime(schedule.startTime);
+      const scheduleEnd = parseTime(schedule.endTime);
+      const slotStart = parseTime(timeSlot.start);
+      const slotEnd = parseTime(timeSlot.end);
+      
+      // Check if there's any overlap between the time ranges
+      // Two ranges overlap if: start1 < end2 AND start2 < end1
+      return scheduleStart < slotEnd && slotStart < scheduleEnd;
+    });
   };
 
   const getConflictingSchedule = (day, timeSlot) => {
-    return existingSchedules.find(schedule => 
-      schedule.dayOfWeek === day && 
-      schedule.startTime === timeSlot.start && 
-      schedule.endTime === timeSlot.end
-    );
+    return existingSchedules.find(schedule => {
+      if (schedule.dayOfWeek !== day) return false;
+      
+      const parseTime = (timeStr) => {
+        const [hours, minutes] = timeStr.split(':').map(Number);
+        return hours * 60 + minutes;
+      };
+      
+      const scheduleStart = parseTime(schedule.startTime);
+      const scheduleEnd = parseTime(schedule.endTime);
+      const slotStart = parseTime(timeSlot.start);
+      const slotEnd = parseTime(timeSlot.end);
+      
+      // Check if there's any overlap between the time ranges
+      return scheduleStart < slotEnd && slotStart < scheduleEnd;
+    });
   };
 
   const handleCellClick = (day, timeSlot) => {

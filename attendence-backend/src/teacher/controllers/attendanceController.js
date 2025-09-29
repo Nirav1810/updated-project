@@ -186,7 +186,13 @@ export const generateQRSession = async (req, res) => {
         sessionId: '', // Will be set below
         classId,
         token: '', // Will be set below
-        expiresAt: new Date(Date.now() + duration * 60 * 1000)
+        expiresAt: new Date(Date.now() + duration * 60 * 1000),
+        subjectCode: classData.subjectCode,
+        subjectName: classData.subjectName,
+        classYear: classData.classYear,
+        semester: classData.semester,
+        division: classData.division,
+        timestamp: new Date()
       },
       isActive: true,
       createdAt: new Date()
@@ -208,10 +214,16 @@ export const generateQRSession = async (req, res) => {
     res.status(201).json({
       success: true,
       message: 'QR session generated successfully',
+      sessionId: qrSession.sessionId,
+      qrPayload: qrSession.qrPayload,
+      expiresAt: qrSession.sessionExpiresAt,
+      sessionExpiresAt: qrSession.sessionExpiresAt,
+      duration: duration,
       data: {
         sessionId: qrSession.sessionId,
         qrPayload: qrSession.qrPayload,
         expiresAt: qrSession.sessionExpiresAt,
+        sessionExpiresAt: qrSession.sessionExpiresAt,
         duration: duration
       }
     });
@@ -264,6 +276,10 @@ export const refreshQRToken = async (req, res) => {
     res.status(200).json({
       success: true,
       message: 'QR token refreshed successfully',
+      sessionId: session.sessionId,
+      newToken: newToken,
+      qrPayload: session.qrPayload,
+      expiresAt: session.sessionExpiresAt,
       data: {
         sessionId: session.sessionId,
         newToken: newToken,
@@ -344,6 +360,7 @@ export const getActiveQRSessions = async (req, res) => {
 
     res.status(200).json({
       success: true,
+      sessions: activeSessions,
       data: activeSessions,
       total: activeSessions.length
     });

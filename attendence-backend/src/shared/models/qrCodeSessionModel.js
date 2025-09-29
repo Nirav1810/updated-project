@@ -24,9 +24,10 @@ const qrCodeSessionSchema = new mongoose.Schema({
   createdAt: { type: Date, default: Date.now },
 });
 
-// Only auto-expire based on session expiration when isActive is false OR session expires
+// Only auto-expire based on session expiration when isActive is false
+// Active sessions should not auto-expire until manually terminated
 qrCodeSessionSchema.index({ sessionExpiresAt: 1 }, { 
-  expireAfterSeconds: 0,
+  expireAfterSeconds: 60, // Give 1 minute buffer after session expires
   partialFilterExpression: { isActive: false }
 });
 

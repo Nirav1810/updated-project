@@ -87,13 +87,14 @@ const Attendance = () => {
 
   const startSessionCountdown = () => {
     if (!activeSession?.sessionExpiresAt) {
-      console.log('No session expiration time available');
+      console.log('No session expiration time available, activeSession:', activeSession);
       return;
     }
     
     console.log('Starting session countdown until:', activeSession.sessionExpiresAt);
     console.log('Current time:', new Date().toISOString());
     console.log('Session expires at (parsed):', new Date(activeSession.sessionExpiresAt).toISOString());
+    console.log('Time difference in minutes:', (new Date(activeSession.sessionExpiresAt).getTime() - new Date().getTime()) / (1000 * 60));
     
     sessionCountdownInterval.current = setInterval(() => {
       const now = new Date().getTime();
@@ -104,7 +105,8 @@ const Attendance = () => {
         now: new Date(now).toISOString(),
         expiry: new Date(expiry).toISOString(),
         difference: difference,
-        secondsLeft: Math.floor(difference / 1000)
+        secondsLeft: Math.floor(difference / 1000),
+        minutesLeft: Math.floor(difference / (1000 * 60))
       });
 
       if (difference > 0) {
@@ -116,7 +118,7 @@ const Attendance = () => {
           toast.warning(`Session expires in ${secondsLeft} seconds`);
         }
       } else {
-        console.log('Session has expired');
+        console.log('Session has expired, clearing session');
         setSessionCountdown(0);
         // Session expired, clean up
         setActiveSession(null);
@@ -144,7 +146,7 @@ const Attendance = () => {
 
   const refreshToken = async () => {
     if (!activeSession?.sessionId) {
-      console.log('No active session for token refresh');
+      console.log('No active session for token refresh, activeSession:', activeSession);
       return;
     }
 
@@ -153,6 +155,12 @@ const Attendance = () => {
       const response = await attendanceService.refreshQRToken(activeSession.sessionId);
       
       console.log('Refresh response:', response);
+      console.log('Response structure:', {
+        success: response.success,
+        hasQrPayload: !!response.qrPayload,
+        qrPayload: response.qrPayload,
+        sessionId: response.sessionId
+      });
       
       if (response.success && response.qrPayload) {
         setCurrentQRData(response.qrPayload);
@@ -161,13 +169,18 @@ const Attendance = () => {
         // Reset the countdown after successful refresh
         setTokenCountdown(15);
       } else {
-        console.error('Refresh failed - no QR payload in response');
+        console.error('Refresh failed - no QR payload in response', response);
+        // Don't clear the session on refresh failure, just retry next cycle
+        console.warn('Token refresh failed, will retry in next cycle');
       }
     } catch (error) {
       console.error('Failed to refresh token:', error);
+      console.error('Error response:', error.response?.data);
+      console.error('Error status:', error.response?.status);
       
       if (error.response?.status === 404) {
         // Session no longer exists
+        console.log('Session not found (404), clearing session');
         setActiveSession(null);
         setCurrentQRData(null);
         stopAllTimers();
@@ -233,19 +246,46 @@ const Attendance = () => {
     {
       refetchInterval: 30000, // Check every 30 seconds for session status
       onSuccess: (data) => {
-        console.log('Active sessions data:', data);
+        console.log('Active sessions query success, data:', data);
+        console.log('Data structure:', {
+          success: data.success,
+          hasSessions: !!data.sessions,
+          sessionsLength: data.sessions?.length,
+          sessions: data.sessions
+        });
+        
         if (!activeSession && data.sessions && data.sessions.length > 0) {
           const session = data.sessions[0];
+          console.log('Setting active session from query:', session);
+          console.log('Session fields:', {
+            sessionId: session.sessionId,
+            sessionExpiresAt: session.sessionExpiresAt,
+            qrPayload: session.qrPayload,
+            isActive: session.isActive
+          });
           setActiveSession(session);
           setCurrentQRData(session.qrPayload);
           console.log('Set active session from query:', session.sessionId);
         }
         if (activeSession && (!data.sessions || data.sessions.length === 0)) {
-          console.log('No active sessions found, clearing local session');
-          setActiveSession(null);
-          setCurrentQRData(null);
-          stopAllTimers();
+          console.log('No active sessions found, but checking if current session is still valid');
+          // Don't immediately clear the session - it might be a temporary polling issue
+          // Instead, let the session expiration logic handle it
+          const now = new Date().getTime();
+          const expiry = new Date(activeSession.sessionExpiresAt).getTime();
+          if (expiry <= now) {
+            console.log('Current session has expired, clearing local session');
+            setActiveSession(null);
+            setCurrentQRData(null);
+            stopAllTimers();
+          } else {
+            console.log('Current session is still valid, keeping it active');
+          }
         }
+      },
+      onError: (error) => {
+        console.error('Failed to fetch active sessions:', error);
+        console.error('Error response:', error.response?.data);
       }
     }
   );
