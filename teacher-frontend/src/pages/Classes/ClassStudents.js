@@ -515,13 +515,13 @@ const ClassStudents = () => {
                         />
                         <div className="h-10 w-10 bg-green-100 rounded-full flex items-center justify-center">
                           <span className="text-green-600 font-medium">
-                            {student.name.charAt(0).toUpperCase()}
+                            {student.name ? student.name.charAt(0).toUpperCase() : '?'}
                           </span>
                         </div>
                         <div>
-                          <h5 className="font-medium text-gray-900">{student.name}</h5>
+                          <h5 className="font-medium text-gray-900">{student.name || 'Unknown'}</h5>
                           <p className="text-sm text-gray-500">
-                            {student.enrollmentNo} • {student.email}
+                            {student.enrollmentNo || 'No enrollment'} • {student.email || 'No email'}
                           </p>
                           <p className="text-xs text-gray-400">
                             Year {student.classYear} • Semester {student.semester}
@@ -574,13 +574,13 @@ const ClassStudents = () => {
                   <div className="flex items-center space-x-4">
                     <div className="h-12 w-12 bg-blue-100 rounded-full flex items-center justify-center">
                       <span className="text-blue-600 font-medium text-lg">
-                        {student.name.charAt(0).toUpperCase()}
+                        {student.name ? student.name.charAt(0).toUpperCase() : '?'}
                       </span>
                     </div>
                     <div>
-                      <h3 className="text-lg font-medium text-gray-900">{student.name}</h3>
+                      <h3 className="text-lg font-medium text-gray-900">{student.name || 'Unknown'}</h3>
                       <p className="text-sm text-gray-500">
-                        {student.enrollmentNo} • {student.email}
+                        {student.enrollmentNo || 'No enrollment'} • {student.email || 'No email'}
                       </p>
                       {student.enrolledAt && (
                         <p className="text-xs text-gray-400">

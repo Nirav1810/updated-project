@@ -2,11 +2,16 @@
 export type RootStackParamList = {
   Login: undefined;
   Register: undefined;
-  ForgotPassword: undefined; // New screen for password reset
+  ForgotPassword: undefined;
   MainTabs: undefined;
   ChangePassword: undefined;
   ClassDetails: { classId: string };
   Profile: undefined;
+  // Add the new screen and its required parameters
+  FaceLiveness: {
+    sessionId: string;
+    classId: string;
+  };
 };
 
 export type TabParamList = {
@@ -47,45 +52,24 @@ export interface Class {
   teacherId: string;
 }
 
-export interface ClassDetails {
-  _id: string;
-  classNumber: string;
-  subjectCode: string;
-  subjectName: string;
-  classYear: string;
-  semester: string;
-  division: string;
-  teacherId: {
-    _id: string;
-    fullName: string;
-    email: string;
-  };
-  students: User[];
-}
-
-export interface Schedule {
-  _id: string;
-  classId: string;
-  sessionType: string;
-  dayOfWeek: string;
-  startTime: string;
-  endTime: string;
-  roomNumber: string;
-  semester: string;
-  academicYear: string;
-  location: { latitude: number; longitude: number };
+export interface ClassDetails extends Class {
+  teacherName: string;
+  studentCount: number;
+  students: { _id: string; fullName: string; enrollmentNo: string }[];
 }
 
 export interface Attendance {
   _id: string;
-  studentId: User;
-  sessionId?: { qrPayload: { timestamp: string } };
-  classId: Class;
-  scheduleId: Schedule;
+  student: {
+    _id: string;
+    fullName: string;
+    enrollmentNo: string;
+  };
+  classInfo: Class;
+  scheduleId?: string;
   studentCoordinates?: Coordinates;
   attendedAt: string;
   livenessPassed: boolean;
-  faceEmbedding: number[];
   synced: boolean;
   syncVersion: number;
   manualEntry: boolean;
@@ -95,10 +79,10 @@ export interface Attendance {
 export interface AttendanceSubmission {
   sessionId: string;
   classId: string;
-  scheduleId: string;
+  scheduleId?: string;
   studentCoordinates: Coordinates;
   livenessPassed: boolean;
-  faceEmbedding: number[];
+  faceImage: string; // Changed from faceEmbedding
 }
 
 export interface QRValidationResponse {
@@ -143,17 +127,11 @@ export interface AttendanceResponse {
     present: number;
     late: number;
     absent: number;
-    manualEntries?: number;
+    manualEntries: number;
   };
 }
 
 export interface SyncResponse {
-  success: number;
-  failed: number;
-  skipped: number;
-  details: Array<{
-    status: 'success' | 'failed' | 'skipped';
-    error?: string;
-    data: AttendanceSubmission
-  }>;
+  message: string;
+  results: { sessionId: string; status: string; message?: string }[];
 }

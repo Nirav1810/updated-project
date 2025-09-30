@@ -3,6 +3,8 @@ import { QRCodeSession } from '../models/qrCodeSessionModel.js';
 import { Class } from '../models/classModel.js';
 import { ClassEnrollment } from '../models/classEnrollmentModel.js';
 import { Schedule } from '../models/scheduleModel.js';
+import { User } from '../models/userModel.js'; // Import User model
+import { compareFaces } from '../services/rekognitionService.js'; // Import our new service
 
 // Submit attendance (unified endpoint for student app)
 export const submitAttendance = async (req, res) => {
@@ -10,30 +12,55 @@ export const submitAttendance = async (req, res) => {
     const { 
       sessionId, 
       classId, 
-      scheduleId, 
       studentCoordinates, 
       livenessPassed, 
-      faceEmbedding 
+      faceImage // Expecting a base64 encoded image string from the app
     } = req.body;
     
     const studentId = req.user.id;
 
-    console.log('Attendance submission request:', { 
+    console.log('New attendance submission request:', { 
       sessionId, 
       classId, 
-      scheduleId, 
       studentId,
       livenessPassed
     });
 
-    // Validate required fields
-    if (!sessionId || !classId) {
-      return res.status(400).json({ 
-        message: 'Session ID and Class ID are required' 
-      });
+    // --- 1. Basic Validation ---
+    if (!sessionId || !classId || !studentCoordinates || !faceImage) {
+      return res.status(400).json({ message: 'Missing required attendance data.' });
+    }
+    if (livenessPassed !== true) {
+      return res.status(400).json({ message: 'Liveness check was not passed.' });
     }
 
-    // Verify the QR session exists and is active
+    // --- 2. Find Student and their Reference Face Image Key ---
+    const student = await User.findById(studentId);
+    if (!student || !student.faceImageS3Key) {
+      return res.status(404).json({ message: 'Student profile not found or face is not registered.' });
+    }
+
+    // --- 3. Perform Face Recognition via AWS Rekognition ---
+    // Convert the base64 image string from the app into a Buffer for the AWS SDK
+    const base64Data = faceImage.replace(/^data:image\/\w+;base64,/, '');
+    const targetImageBuffer = Buffer.from(base64Data, 'base64');
+    
+    // Check image size (AWS Rekognition has limits)
+    const imageSizeInMB = targetImageBuffer.length / (1024 * 1024);
+    console.log(`Image size: ${imageSizeInMB.toFixed(2)}MB`);
+    
+    if (imageSizeInMB > 5) {
+      return res.status(400).json({ message: 'Image too large. Please try again with a smaller image.' });
+    }
+    
+    const facesDoMatch = await compareFaces(student.faceImageS3Key, targetImageBuffer);
+
+    if (!facesDoMatch) {
+      return res.status(401).json({ message: 'Face recognition failed. Identity could not be verified.' });
+    }
+    console.log(`✅ Face successfully verified for student: ${student.fullName}`);
+
+    // --- 4. Verify QR Session and Prevent Duplicates ---
     const qrSession = await QRCodeSession.findOne({
       sessionId,
       classId,
@@ -42,289 +69,326 @@ export const submitAttendance = async (req, res) => {
     });
 
     if (!qrSession) {
-      return res.status(400).json({ 
-        message: 'QR session not found or expired. Please scan a new QR code.' 
-      });
+      return res.status(400).json({ message: 'This QR code is invalid or has expired.' });
     }
-
-    // Check if attendance already exists for today
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-
-    const existingAttendance = await Attendance.findOne({
-      studentId,
-      classId,
-      timestamp: { $gte: today, $lt: tomorrow }
-    });
-
-    if (existingAttendance) {
-      return res.status(409).json({ 
-        message: 'Attendance already marked for today' 
-      });
-    }
-
-    // Verify student is enrolled in the class
-    const enrollment = await ClassEnrollment.findOne({
-      studentId,
-      classId
-    });
-
-    if (!enrollment) {
-      return res.status(403).json({
-        message: 'You are not enrolled in this class'
-      });
-    }
-
-    // Create attendance record
-    const attendanceData = {
-      studentId,
-      classId,
-      scheduleId: scheduleId || null,
-      sessionId: qrSession._id, // Reference to QR session
-      studentCoordinates: studentCoordinates || {},
-      livenessPassed: livenessPassed || true,
-      faceEmbedding: faceEmbedding || [],
-      timestamp: new Date(),
-      synced: true,
-      syncVersion: 1,
-      manualEntry: false
-    };
-
-    const attendance = await Attendance.create(attendanceData);
     
-    // Populate the attendance record for response
-    const populatedAttendance = await Attendance.findById(attendance._id)
-      .populate('classId', 'subjectCode subjectName classYear semester division classNumber')
-      .populate('studentId', 'name fullName email enrollmentNo')
-      .populate('scheduleId');
+    const existingAttendance = await Attendance.findOne({ studentId, sessionId: qrSession._id });
+    if (existingAttendance) {
+      return res.status(409).json({ message: 'You have already marked attendance for this session.' });
+    }
 
-    // Transform to match student app expected format
-    const transformedAttendance = {
-      _id: populatedAttendance._id,
-      studentId: {
-        _id: populatedAttendance.studentId._id,
-        fullName: populatedAttendance.studentId.fullName || populatedAttendance.studentId.name,
-        email: populatedAttendance.studentId.email,
-        enrollmentNo: populatedAttendance.studentId.enrollmentNo
+    // --- 5. Save the Attendance Record ---
+    const attendanceRecord = new Attendance({
+      studentId,
+      classId,
+      sessionId: qrSession._id, // Use QRCodeSession's ObjectId instead of sessionId string
+      scheduleId: qrSession.scheduleId, // Associate with schedule from QR session
+      status: 'present',
+      location: {
+        type: 'Point',
+        coordinates: [studentCoordinates.longitude, studentCoordinates.latitude],
       },
-      sessionId: {
-        qrPayload: {
-          timestamp: qrSession.qrPayload.timestamp
-        }
-      },
-      classId: {
-        _id: populatedAttendance.classId._id,
-        classNumber: populatedAttendance.classId.classNumber,
-        subjectCode: populatedAttendance.classId.subjectCode,
-        subjectName: populatedAttendance.classId.subjectName,
-        classYear: populatedAttendance.classId.classYear,
-        semester: populatedAttendance.classId.semester,
-        division: populatedAttendance.classId.division
-      },
-      scheduleId: populatedAttendance.scheduleId,
-      studentCoordinates: populatedAttendance.studentCoordinates,
-      attendedAt: populatedAttendance.timestamp,
-      livenessPassed: populatedAttendance.livenessPassed,
-      faceEmbedding: populatedAttendance.faceEmbedding,
-      synced: populatedAttendance.synced,
-      syncVersion: populatedAttendance.syncVersion,
-      manualEntry: populatedAttendance.manualEntry,
-      status: 'present'
-    };
+      markedBy: 'student',
+      livenessPassed: true,
+      timestamp: new Date()
+    });
 
-    res.status(201).json(transformedAttendance);
+    await attendanceRecord.save();
+
+    res.status(201).json({
+      message: 'Attendance marked successfully!',
+      attendance: attendanceRecord,
+    });
 
   } catch (error) {
-    console.error('Submit Attendance Error:', error);
-    res.status(500).json({ 
-      message: 'Failed to submit attendance',
-      error: error.message 
-    });
+    console.error('Error submitting attendance:', error);
+    res.status(500).json({ message: error.message || 'An unexpected server error occurred.' });
   }
 };
 
-// Sync multiple attendance records
+
+// Sync offline attendance records
 export const syncAttendance = async (req, res) => {
   try {
     const { attendances } = req.body;
     const studentId = req.user.id;
 
-    if (!attendances || !Array.isArray(attendances)) {
-      return res.status(400).json({ 
-        message: 'Attendances array is required' 
-      });
+    if (!Array.isArray(attendances) || attendances.length === 0) {
+      return res.status(400).json({ message: 'No attendance records to sync.' });
     }
 
-    console.log(`Syncing ${attendances.length} attendance records for student ${studentId}`);
+    const syncResults = [];
+    for (const record of attendances) {
+      const { sessionId, classId, scheduleId, studentCoordinates, livenessPassed, faceEmbedding, timestamp } = record;
+      
+      const existing = await Attendance.findOne({ studentId, sessionId });
 
-    const results = {
-      success: 0,
-      failed: 0,
-      skipped: 0,
-      details: []
-    };
-
-    for (const attendanceData of attendances) {
-      try {
-        const {
-          sessionId,
-          classId,
-          scheduleId,
-          studentCoordinates,
-          livenessPassed,
-          faceEmbedding
-        } = attendanceData;
-
-        // Check if already exists
-        const existing = await Attendance.findOne({
-          studentId,
-          classId,
-          sessionId: attendanceData.sessionId
-        });
-
-        if (existing) {
-          results.skipped++;
-          results.details.push({
-            status: 'skipped',
-            data: attendanceData,
-            error: 'Already exists'
-          });
-          continue;
-        }
-
-        // Create new attendance record
-        const newAttendance = await Attendance.create({
-          studentId,
-          classId,
-          scheduleId: scheduleId || null,
-          sessionId,
-          studentCoordinates: studentCoordinates || {},
-          livenessPassed: livenessPassed || true,
-          faceEmbedding: faceEmbedding || [],
-          synced: true,
-          syncVersion: 1,
-          manualEntry: false
-        });
-
-        results.success++;
-        results.details.push({
-          status: 'success',
-          data: attendanceData
-        });
-
-      } catch (error) {
-        console.error('Failed to sync attendance record:', error);
-        results.failed++;
-        results.details.push({
-          status: 'failed',
-          data: attendanceData,
-          error: error.message
-        });
+      if (existing) {
+        syncResults.push({ sessionId, status: 'skipped', message: 'Already exists.' });
+        continue;
       }
+
+      const newRecord = new Attendance({
+        studentId,
+        sessionId,
+        classId,
+        scheduleId,
+        studentCoordinates,
+        livenessPassed,
+        faceEmbedding,
+        timestamp: new Date(timestamp),
+        synced: true,
+      });
+
+      await newRecord.save();
+      syncResults.push({ sessionId, status: 'success' });
     }
 
-    res.json(results);
+    res.status(200).json({
+      message: 'Sync completed.',
+      results: syncResults,
+    });
 
   } catch (error) {
-    console.error('Sync Attendance Error:', error);
-    res.status(500).json({ 
-      message: 'Failed to sync attendance',
-      error: error.message 
-    });
+    console.error('Sync error:', error);
+    res.status(500).json({ message: error.message });
   }
 };
 
-// Get attendance records by class
+
+// Get attendance records for a class (for teachers/admins)
 export const getAttendanceByClass = async (req, res) => {
   try {
     const { classId } = req.params;
     const { startDate, endDate, status } = req.query;
-    const userId = req.user.id;
 
-    console.log('Get attendance by class:', { classId, userId, startDate, endDate, status });
+    const query = { classId };
 
-    // Build query
-    let query = { classId };
-    
-    // If user is a student, only show their own attendance
-    if (req.user.role === 'student') {
-      query.studentId = userId;
-    }
-
-    // Date range filter
     if (startDate || endDate) {
       query.timestamp = {};
       if (startDate) query.timestamp.$gte = new Date(startDate);
       if (endDate) query.timestamp.$lte = new Date(endDate);
     }
+    if (status && status !== 'all') {
+      query.status = status;
+    }
 
-    const attendanceRecords = await Attendance.find(query)
-      .populate('studentId', 'name fullName email enrollmentNo')
-      .populate('classId', 'subjectCode subjectName classYear semester division classNumber')
-      .populate('scheduleId')
+    const records = await Attendance.find(query)
+      .populate({
+        path: 'studentId',
+        select: 'fullName enrollmentNo name'
+      })
+      .populate({
+        path: 'classId',
+        select: 'classNumber subjectCode subjectName'
+      })
       .sort({ timestamp: -1 });
+    
+    // Also, we need a list of all enrolled students to mark absentees
+    const enrolledStudents = await ClassEnrollment.find({ classId }).populate('studentId', 'fullName enrollmentNo name');
 
-    // Transform records to match student app format
-    const transformedRecords = attendanceRecords.map(record => ({
+    // This logic needs to be more sophisticated.
+    // For a given day/session, you'd find who from the enrolled list DID NOT attend.
+    // The current implementation just returns recorded presences/manual entries.
+
+    const transformedRecords = records.map(record => ({
       _id: record._id,
-      studentId: {
+      student: record.studentId ? {
         _id: record.studentId._id,
         fullName: record.studentId.fullName || record.studentId.name,
-        email: record.studentId.email,
-        enrollmentNo: record.studentId.enrollmentNo
-      },
-      sessionId: record.sessionId ? {
-        qrPayload: {
-          timestamp: record.timestamp
-        }
+        enrollmentNo: record.studentId.enrollmentNo,
       } : null,
-      classId: {
-        _id: record.classId._id,
-        classNumber: record.classId.classNumber,
-        subjectCode: record.classId.subjectCode,
-        subjectName: record.classId.subjectName,
-        classYear: record.classId.classYear,
-        semester: record.classId.semester,
-        division: record.classId.division
-      },
-      scheduleId: record.scheduleId,
-      studentCoordinates: record.studentCoordinates,
+      classInfo: record.classId,
       attendedAt: record.timestamp,
-      livenessPassed: record.livenessPassed,
-      faceEmbedding: record.faceEmbedding,
-      synced: record.synced,
-      syncVersion: record.syncVersion,
-      manualEntry: record.manualEntry,
-      status: 'present'
+      status: record.status,
     }));
 
-    // Calculate stats
-    const total = transformedRecords.length;
-    const present = transformedRecords.filter(r => r.status === 'present').length;
-    const late = transformedRecords.filter(r => r.status === 'late').length;
-    const absent = transformedRecords.filter(r => r.status === 'absent').length;
-    const manualEntries = transformedRecords.filter(r => r.manualEntry).length;
-
-    const response = {
-      attendance: transformedRecords,
-      stats: {
-        total,
-        present,
-        late,
-        absent,
-        manualEntries
-      }
+    const stats = {
+      totalEnrolled: enrolledStudents.length,
+      present: transformedRecords.filter(r => r.status === 'present').length,
+      absent: enrolledStudents.length - transformedRecords.filter(r => r.status === 'present').length, // Simplistic calculation
     };
 
-    res.json(response);
+    res.json({
+      attendance: transformedRecords,
+      stats,
+    });
 
   } catch (error) {
-    console.error('Get Attendance By Class Error:', error);
-    res.status(500).json({ 
-      message: 'Failed to get attendance records',
-      error: error.message 
+    console.error('Error fetching attendance records:', error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
+
+// Get attendance records for a student
+export const getStudentAttendance = async (req, res) => {
+  try {
+    const studentId = req.user.id;
+    const { classId } = req.query; // optional filter by class
+
+    const query = { studentId };
+    if (classId) {
+      query.classId = classId;
+    }
+
+    const records = await Attendance.find(query)
+      .populate({
+        path: 'classId',
+        select: 'subjectName subjectCode'
+      })
+      .sort({ timestamp: -1 });
+
+    res.json(records);
+    
+  } catch (error) {
+    console.error('Error fetching student attendance:', error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// Update an attendance record (e.g., mark as absent)
+export const updateAttendance = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+
+    if (!['present', 'absent', 'late'].includes(status)) {
+      return res.status(400).json({ message: 'Invalid status.' });
+    }
+
+    const updatedRecord = await Attendance.findByIdAndUpdate(id, { status }, { new: true });
+
+    if (!updatedRecord) {
+      return res.status(404).json({ message: 'Record not found.' });
+    }
+
+    res.json(updatedRecord);
+  } catch (error) {
+    console.error('Error updating attendance:', error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
+
+// Manually create an attendance record
+export const createManualAttendance = async (req, res) => {
+  try {
+    const { studentId, classId, scheduleId, status, timestamp } = req.body;
+    
+    const newRecord = new Attendance({
+      studentId,
+      classId,
+      scheduleId,
+      status,
+      timestamp: new Date(timestamp),
+      manualEntry: true,
+      markedBy: req.user.id, // Log who made the manual entry
     });
+
+    await newRecord.save();
+    res.status(201).json(newRecord);
+    
+  } catch (error) {
+    console.error('Error with manual attendance:', error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
+export const getAttendanceBySchedule = async (req, res) => {
+  try {
+    const { scheduleId } = req.params;
+
+    const attendanceRecords = await Attendance.find({ scheduleId: scheduleId })
+      .populate('studentId', 'fullName enrollmentNo');
+      
+    if (!attendanceRecords) {
+      return res.status(404).json({ message: 'No attendance records found for this schedule.' });
+    }
+
+    res.status(200).json(attendanceRecords);
+  } catch (error) {
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+
+export const getFullAttendanceReport = async (req, res) => {
+  try {
+    const { classId } = req.params;
+    const { startDate, endDate, studentId } = req.query;
+
+    const matchQuery = { classId: mongoose.Types.ObjectId(classId) };
+    if (startDate) {
+      matchQuery.timestamp = { $gte: new Date(startDate) };
+    }
+    if (endDate) {
+      matchQuery.timestamp = { ...matchQuery.timestamp, $lte: new Date(endDate) };
+    }
+    if (studentId) {
+      matchQuery.studentId = mongoose.Types.ObjectId(studentId);
+    }
+
+    const report = await Attendance.aggregate([
+      { $match: matchQuery },
+      {
+        $group: {
+          _id: '$studentId',
+          presentDays: {
+            $sum: { $cond: [{ $eq: ['$status', 'present'] }, 1, 0] }
+          },
+          absentDays: {
+            $sum: { $cond: [{ $eq: ['$status', 'absent'] }, 1, 0] }
+          },
+          lateDays: {
+            $sum: { $cond: [{ $eq: ['$status', 'late'] }, 1, 0] }
+          }
+        }
+      },
+      {
+        $lookup: {
+          from: 'users',
+          localField: '_id',
+          foreignField: '_id',
+          as: 'studentInfo'
+        }
+      },
+      { $unwind: '$studentInfo' },
+      {
+        $project: {
+          _id: 0,
+          studentId: '$_id',
+          studentName: '$studentInfo.fullName',
+          enrollmentNo: '$studentInfo.enrollmentNo',
+          presentDays: 1,
+          absentDays: 1,
+          lateDays: 1,
+          totalDays: { $add: ['$presentDays', '$absentDays', '$lateDays'] }
+        }
+      },
+      {
+        $project: {
+          studentId: 1,
+          studentName: 1,
+          enrollmentNo: 1,
+          presentDays: 1,
+          absentDays: 1,
+          lateDays: 1,
+          totalDays: 1,
+          percentage: {
+            $cond: [
+              { $eq: ['$totalDays', 0] },
+              0,
+              { $multiply: [{ $divide: ['$presentDays', '$totalDays'] }, 100] }
+            ]
+          }
+        }
+      }
+    ]);
+
+    res.json(report);
+  } catch (error) {
+    console.error('Error generating full report:', error);
+    res.status(500).json({ message: error.message });
   }
 };

@@ -11,6 +11,8 @@ const api = axios.create({
 
 // Request Interceptor to add the token
 api.interceptors.request.use(async (config) => {
+  console.log('API Request:', config.method?.toUpperCase(), config.url, 'Base URL:', BASE_URL);
+  console.log('Request data:', config.data);
   const token = await SecureStore.getItemAsync('token');
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
@@ -20,10 +22,15 @@ api.interceptors.request.use(async (config) => {
 
 // Response Interceptor for error handling
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    console.log('API Response Success:', response.status, response.config?.url);
+    return response;
+  },
   async (error) => {
-    const message = error.response?.data?.error || error.message || 'An Unknown error occurred';
+    console.log('API Response Error:', error.response?.status, error.response?.data, error.config?.url);
+    const message = error.response?.data?.message || error.response?.data?.error || error.message || 'An Unknown error occurred';
     if (error.response?.status === 401) {
+      console.log('401 Unauthorized - clearing stored tokens');
       await SecureStore.deleteItemAsync('token');
       await SecureStore.deleteItemAsync('user');
       await SecureStore.deleteItemAsync('role');
@@ -69,7 +76,10 @@ export const auth = {
     password: string;
     fullName: string;
     role: UserRole;
+    classYear?: string;
+    semester?: string;
     faceEmbedding?: number[];
+    faceImageBase64?: string;
   }) => {
     return api.post<T.AuthResponse>('/auth/register', data).then(res => res.data);
   },

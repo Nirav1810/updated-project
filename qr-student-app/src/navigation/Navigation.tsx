@@ -19,6 +19,7 @@ import ProfileScreen from '../screens/ProfileScreen';
 import AttendanceManagementScreen from '../screens/AttendanceManagementScreen';
 import ChangePasswordScreen from '../screens/ChangePasswordScreen';
 import ClassDetailsScreen from '../screens/ClassDetailsScreen';
+import FaceLivenessScreen from '../screens/FaceLivenessScreen'; // Import the new screen
 
 // Import Components
 import FullScreenLoader from '../components/FullScreenLoader';
@@ -26,32 +27,31 @@ import FullScreenLoader from '../components/FullScreenLoader';
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<TabParamList>();
 
-// A map for tab icons to make the code cleaner and more scalable
-const tabIconMap: Record<keyof TabParamList, 
-  { focused: keyof typeof Ionicons.glyphMap; unfocused: keyof typeof Ionicons.glyphMap }> = {
-    Home: { focused: 'home', unfocused: 'home-outline' },
-    Scan: { focused: 'qr-code', unfocused: 'qr-code-outline' },
-    Classes: { focused: 'book', unfocused: 'book-outline' },
-    Profile: { focused: 'person', unfocused: 'person-outline' },
-    AttendanceManagement: { focused: 'checkbox', unfocused: 'checkbox-outline' },
+const tabIconMap: Record<keyof TabParamList, { focused: keyof typeof Ionicons.glyphMap; unfocused: keyof typeof Ionicons.glyphMap }> = {
+  Home: { focused: 'home', unfocused: 'home-outline' },
+  Scan: { focused: 'qr-code', unfocused: 'qr-code-outline' },
+  Classes: { focused: 'school', unfocused: 'school-outline' },
+  Profile: { focused: 'person-circle', unfocused: 'person-circle-outline' },
+  AttendanceManagement: { focused: 'file-tray-full', unfocused: 'file-tray-outline' },
 };
 
 const TabNavigator = () => {
+  const { colors } = useTheme();
   const { user } = useAuth();
-  const theme = useTheme(); // Use the theme from PaperProvider
 
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
+        headerShown: false,
         tabBarIcon: ({ focused, color, size }) => {
-          const icons = tabIconMap[route.name];
-          const iconName = focused ? icons.focused : icons.unfocused;
+          const iconName = focused ? tabIconMap[route.name].focused : tabIconMap[route.name].unfocused;
           return <Ionicons name={iconName} size={size} color={color} />;
         },
-        tabBarActiveTintColor: theme.colors.primary,
-        tabBarInactiveTintColor: '#757575',
+        tabBarActiveTintColor: colors.primary,
+        tabBarInactiveTintColor: 'gray',
         tabBarStyle: {
-          backgroundColor: theme.colors.background,
+          backgroundColor: '#fff',
+          borderTopWidth: 1,
           borderTopColor: '#e0e0e0',
         },
       })} 
@@ -60,19 +60,20 @@ const TabNavigator = () => {
       {user?.role === 'student' && <Tab.Screen name="Scan" component={ScanScreen} />}
       <Tab.Screen name="Classes" component={ClassesScreen} />
       <Tab.Screen name="Profile" component={ProfileScreen} />
-      <Tab.Screen
-        name="AttendanceManagement"
-        component={AttendanceManagementScreen}
-        initialParams={{ classId: '' }}
-      />
+      {user?.role === 'teacher' && (
+        <Tab.Screen
+          name="AttendanceManagement"
+          component={AttendanceManagementScreen}
+          initialParams={{ classId: '' }}
+        />
+      )}
     </Tab.Navigator>
   );
 };
 
 const Navigation = () => {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { user, isLoading } = useAuth();
 
-  // The loading check should only be here, at the top level.
   if (isLoading) {
     return <FullScreenLoader />;
   }
@@ -80,11 +81,16 @@ const Navigation = () => {
   return (
     <NavigationContainer>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
-        {isAuthenticated ? (
+        {user ? (
           <>
             <Stack.Screen name="MainTabs" component={TabNavigator} />
             <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />
             <Stack.Screen name="ClassDetails" component={ClassDetailsScreen} />
+            {/* Add FaceLivenessScreen here, without header for a full-screen experience */}
+            <Stack.Screen 
+              name="FaceLiveness" 
+              component={FaceLivenessScreen} 
+            />
           </>
         ) : (
           <>

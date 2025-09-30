@@ -1,71 +1,68 @@
 import React, { useState, useCallback } from 'react';
 import { View, StyleSheet, ActivityIndicator, Animated } from 'react-native';
 import { Text, Button, useTheme } from 'react-native-paper';
-import { CameraView, BarcodeScanningResult, Camera, BarcodeType } from 'expo-camera';
+import { CameraView, BarcodeScanningResult, useCameraPermissions, BarcodeType } from 'expo-camera';
 import * as Location from 'expo-location';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useIsFocused } from '@react-navigation/native';
 import { useAuth } from '../contexts/AuthContext';
-import { attendance, qr } from '../services/api';
-import { TabParamList } from '../types';
+import { qr } from '../services/api';
+import { TabParamList, RootStackParamList } from '../types';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 
-type Props = NativeStackScreenProps<TabParamList, 'Scan'>;
+type Props = NativeStackScreenProps<TabParamList & RootStackParamList, 'Scan'>;
 type PermissionStatus = 'checking' | 'granted' | 'denied';
-type ScanStatus = 'scanning' | 'loading' | 'success' | 'error';
+type ScanStatus = 'scanning' | 'loading' | 'error';
 
 const ScanScreen = ({ navigation }: Props) => {
   const { user } = useAuth();
   const { colors } = useTheme();
+  const [cameraPermission, requestCameraPermission] = useCameraPermissions();
+  const isFocused = useIsFocused();
 
   const [permissionStatus, setPermissionStatus] = useState<PermissionStatus>('checking');
   const [scanStatus, setScanStatus] = useState<ScanStatus>('scanning');
   const [statusMessage, setStatusMessage] = useState('');
 
-  // Animation for the scanning line
   const scanAnimation = new Animated.Value(0);
 
   const startAnimation = () => {
     scanAnimation.setValue(0);
     Animated.loop(
       Animated.sequence([
-        Animated.timing(scanAnimation, {
-          toValue: 1,
-          duration: 2500,
-          useNativeDriver: true,
-        }),
-        Animated.timing(scanAnimation, {
-          toValue: 0,
-          duration: 2500,
-          useNativeDriver: true,
-        }),
+        Animated.timing(scanAnimation, { toValue: 1, duration: 2500, useNativeDriver: true }),
+        Animated.timing(scanAnimation, { toValue: 0, duration: 2500, useNativeDriver: true }),
       ])
     ).start();
   };
 
   const checkPermissions = useCallback(async () => {
-    const cameraStatus = await Camera.getCameraPermissionsAsync();
     const locationStatus = await Location.getForegroundPermissionsAsync();
     
-    if (cameraStatus.granted && locationStatus.granted) {
+    if (cameraPermission?.granted && locationStatus.granted) {
       setPermissionStatus('granted');
       startAnimation();
     } else {
       setPermissionStatus('denied');
     }
-  }, []);
+  }, [cameraPermission]);
 
   useFocusEffect(
     useCallback(() => {
-      // Reset state when screen comes into focus
+      // Reset scan status when screen is focused
       setScanStatus('scanning');
       setStatusMessage('');
       checkPermissions();
-    }, [checkPermissions])
+      
+      // Restart animation when focused
+      if (permissionStatus === 'granted') {
+        startAnimation();
+      }
+    }, [checkPermissions, permissionStatus])
   );
 
   const requestPermissions = async () => {
-    await Camera.requestCameraPermissionsAsync();
+    await requestCameraPermission();
     await Location.requestForegroundPermissionsAsync();
     checkPermissions();
   };
@@ -77,58 +74,25 @@ const ScanScreen = ({ navigation }: Props) => {
     setStatusMessage('Verifying QR Code...');
     
     try {
-      // Parse the QR data (it's JSON stringified)
-      let qrData;
-      try {
-        qrData = JSON.parse(data);
-        console.log('Parsed QR data:', qrData);
-      } catch (parseError) {
-        console.error('QR data parse error:', parseError);
-        throw new Error('Invalid QR code format');
-      }
+      const qrData = JSON.parse(data);
+      if (!qrData.token) throw new Error('QR code missing token');
 
-      // Extract the token from the parsed data
-      if (!qrData.token) {
-        throw new Error('QR code missing token');
-      }
-
-      // 1. Validate QR Code with the extracted token
       const validateResponse = await qr.validate({ token: qrData.token });
       if (!validateResponse.valid) {
         throw new Error(validateResponse.message || 'Invalid or expired QR code.');
       }
 
-      console.log('QR validation response:', validateResponse);
-      const { sessionId, classId, classInfo } = validateResponse;
+      const { sessionId, classId } = validateResponse;
       
-      // 2. Get accurate location
-      setStatusMessage('Getting your location...');
-      const location = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Highest,
-      });
+      // Navigate to Face Liveness Screen on success
+      navigation.navigate('FaceLiveness', { sessionId, classId });
 
-      // 3. Submit attendance
-      setStatusMessage('Marking your attendance...');
-      await attendance.submit({
-        scheduleId: '', // Optional field - can be empty
-        sessionId,
-        classId,
-        studentCoordinates: {
-          latitude: location.coords.latitude,
-          longitude: location.coords.longitude,
-        },
-        livenessPassed: true, // Placeholder
-        faceEmbedding: [], // Placeholder
-      });
-
-      setScanStatus('success');
-      setStatusMessage('Attendance Marked Successfully!');
     } catch (err: any) {
       console.error('QR scan error:', err);
       setScanStatus('error');
       setStatusMessage(err.message || 'An unknown error occurred.');
     }
-  }, [scanStatus]);
+  }, [scanStatus, navigation]);
 
   const animatedStyle = {
     transform: [
@@ -141,7 +105,6 @@ const ScanScreen = ({ navigation }: Props) => {
     ],
   };
 
-  // Render content based on permission status
   const renderContent = () => {
     if (permissionStatus === 'checking') {
       return <ActivityIndicator size="large" color={colors.primary} />;
@@ -169,6 +132,8 @@ const ScanScreen = ({ navigation }: Props) => {
       <View style={StyleSheet.absoluteFillObject}>
         <CameraView
           style={StyleSheet.absoluteFillObject}
+          facing="back"
+          active={isFocused && permissionStatus === 'granted' && scanStatus === 'scanning'}
           onBarcodeScanned={scanStatus === 'scanning' ? handleBarCodeScanned : undefined}
           barcodeScannerSettings={{
             barcodeTypes: ['qr'] as BarcodeType[],
@@ -183,7 +148,6 @@ const ScanScreen = ({ navigation }: Props) => {
               {scanStatus !== 'scanning' && (
                 <View style={styles.statusContainer}>
                   {scanStatus === 'loading' && <ActivityIndicator size="large" color="#fff" />}
-                  {scanStatus === 'success' && <MaterialCommunityIcons name="check-circle-outline" size={80} color="#4caf50" />}
                   {scanStatus === 'error' && <MaterialCommunityIcons name="close-circle-outline" size={80} color={colors.error} />}
                   <Text style={styles.statusText}>{statusMessage}</Text>
                 </View>
@@ -197,7 +161,11 @@ const ScanScreen = ({ navigation }: Props) => {
             <Button
               icon="camera-retake-outline"
               mode="contained"
-              onPress={() => setScanStatus('scanning')}
+              onPress={() => {
+                setScanStatus('scanning');
+                setStatusMessage('');
+                startAnimation();
+              }}
             >
               Scan Again
             </Button>

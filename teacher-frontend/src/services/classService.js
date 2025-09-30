@@ -48,6 +48,24 @@ export const classService = {
     return response.data;
   },
   
+  // Get available students for enrollment in a class
+  getAvailableStudentsForClass: async (classId) => {
+    const response = await api.get(`/api/classes/${classId}/available-students`);
+    return response.data;
+  },
+  
+  // Teacher enroll single student
+  teacherEnrollStudent: async (classId, studentId) => {
+    const response = await api.post(`/api/classes/${classId}/enroll-student`, { studentId });
+    return response.data;
+  },
+  
+  // Teacher batch enroll students
+  teacherBatchEnrollStudents: async (classId, studentIds) => {
+    const response = await api.post(`/api/classes/${classId}/batch-enroll`, { studentIds });
+    return response.data;
+  },
+  
   removeStudentFromClass: async (classId, studentId) => {
     const response = await api.delete(`/api/teacher/classes/${classId}/students/${studentId}`);
     return response.data;

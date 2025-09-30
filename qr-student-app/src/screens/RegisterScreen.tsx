@@ -3,6 +3,7 @@ import { View, StyleSheet } from 'react-native';
 import { TextInput, Button, Text, Snackbar, RadioButton, ActivityIndicator, ProgressBar, useTheme } from 'react-native-paper';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import * as FileSystem from 'expo-file-system/legacy';
 import { useAuth } from '../contexts/AuthContext';
 import { RootStackParamList } from '../types';
 import AuthContainer from '../components/Auth/AuthContainer';
@@ -23,6 +24,7 @@ const RegisterScreen = ({ navigation }: Props) => {
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<'student' | 'teacher' | 'admin'>('student');
   const [faceEmbedding, setFaceEmbedding] = useState<number[] | null>(null);
+  const [faceImageUri, setFaceImageUri] = useState<string | null>(null);
 
   // State for UI
   const [loading, setLoading] = useState(false);
@@ -45,20 +47,27 @@ const RegisterScreen = ({ navigation }: Props) => {
     setSuccess('');
 
     try {
-      const photo = await cameraRef.current?.takePictureAsync();
-      // TODO: Here you would send 'photo.uri' to a backend or a
-      // local machine learning model (e.g., TensorFlow.js) to
-      // extract the face embedding. This is a complex step that
-      // requires a model and more code, so we'll use a mock for now.
-
-      // Simulating a mock embedding extraction
-      console.log('Simulating face capture and embedding extraction...');
-      const mockEmbedding = Array.from({ length: 128 }, () => Math.random());
-      setFaceEmbedding(mockEmbedding);
-      setSuccess('Face captured successfully! Proceed to register.');
+      const photo = await cameraRef.current?.takePictureAsync({
+        quality: 0.7,
+        base64: false,
+        skipProcessing: true,
+      });
+      
+      if (photo && photo.uri) {
+        // Store the photo URI for later upload
+        setFaceImageUri(photo.uri);
+        
+        // Create a mock embedding for validation (real embedding will be created on server)
+        console.log('Face captured successfully, preparing for upload...');
+        const mockEmbedding = Array.from({ length: 128 }, () => Math.random());
+        setFaceEmbedding(mockEmbedding);
+        setSuccess('Face captured successfully! Proceed to register.');
+      } else {
+        throw new Error('Failed to capture photo');
+      }
     } catch (err: any) {
       setError('Failed to capture face. Please try again.');
-      console.log(err);
+      console.log('Face capture error:', err);
     } finally {
       setLoading(false);
     }
@@ -84,7 +93,7 @@ const RegisterScreen = ({ navigation }: Props) => {
         setError('Please enter a valid semester (1-8).');
         return;
       }
-      if (!faceEmbedding) {
+      if (!faceEmbedding || !faceImageUri) {
         setError('Face capture is required for student registration.');
         return;
       }
@@ -92,6 +101,18 @@ const RegisterScreen = ({ navigation }: Props) => {
 
     setLoading(true);
     try {
+      let faceImageBase64 = null;
+      
+      // Convert face image to base64 if captured
+      if (faceImageUri) {
+        console.log('Converting face image to base64...');
+        const base64 = await FileSystem.readAsStringAsync(faceImageUri, {
+          encoding: 'base64',
+        });
+        faceImageBase64 = `data:image/jpeg;base64,${base64}`;
+        console.log('Face image converted to base64, size:', base64.length);
+      }
+
       await register({
         fullName,
         email,
@@ -100,7 +121,7 @@ const RegisterScreen = ({ navigation }: Props) => {
         enrollmentNo: enrollmentNo || undefined,
         classYear: classYear || undefined,
         semester: semester || undefined,
-        faceEmbedding: faceEmbedding || undefined,
+        faceImageBase64: faceImageBase64 || undefined,
       });
       setSuccess('Registration successful! Redirecting to login...');
       setTimeout(() => navigation.replace('Login'), 2000);

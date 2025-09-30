@@ -1,13 +1,18 @@
 import React, { useState, useCallback } from 'react';
 import { StyleSheet, View, FlatList, RefreshControl, Pressable } from 'react-native';
 import { Text, Card, ActivityIndicator, Snackbar, useTheme } from 'react-native-paper';
+import { CompositeScreenProps } from '@react-navigation/native';
+import { BottomTabScreenProps } from '@react-navigation/bottom-tabs';
 import { NativeStackScreenProps } from '@react-navigation/native-stack';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useAuth } from '../contexts/AuthContext';
 import { classes } from '../services/api';
-import { Class, RootStackParamList } from '../types';
+import { Class, TabParamList, RootStackParamList } from '../types';
 
-type Props = NativeStackScreenProps<RootStackParamList, 'ClassDetails'>;
+type Props = CompositeScreenProps<
+  BottomTabScreenProps<TabParamList, 'Classes'>,
+  NativeStackScreenProps<RootStackParamList>
+>;
 
 // A simplified, pressable card for students
 const StudentClassCard = ({ classItem, onNavigate }: { classItem: Class; onNavigate: () => void; }) => {

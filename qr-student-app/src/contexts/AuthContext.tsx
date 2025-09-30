@@ -17,6 +17,7 @@ type AuthContextType = {
     classYear?: string;
     semester?: string;
     faceEmbedding?: number[];
+    faceImageBase64?: string;
   }) => Promise<void>;
   forgotPassword: (data: { email?: string; enrollmentNo?: string }) => Promise<void>;
   logout: () => Promise<void>;
@@ -81,7 +82,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     password: string;
     fullName: string;
     role: 'student' | 'teacher' | 'admin';
+    classYear?: string;
+    semester?: string;
     faceEmbedding?: number[];
+    faceImageBase64?: string;
   }) => {
     try {
       const response = await auth.register(data);

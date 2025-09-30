@@ -1,48 +1,45 @@
 import mongoose from 'mongoose';
+import bcrypt from 'bcryptjs';
 
 const userSchema = new mongoose.Schema({
   enrollmentNo: { 
     type: String, 
-    required: function() {
-      return this.role === 'student'; // Only required for students
-    },
-    index: { unique: true, sparse: true } // Unique sparse index
+    required: function() { return this.role === 'student'; },
+    index: { unique: true, sparse: true }
   },
   email: { type: String, unique: true, required: true, lowercase: true },
   password: { type: String, required: true },
-  name: { type: String, required: true },
-  fullName: { type: String },
-  role: { type: String, enum: ['teacher', 'student', 'admin'], required: true, default: 'teacher' },
-  // Student-specific fields
+  fullName: { type: String, required: true },
+  role: { type: String, enum: ['teacher', 'student', 'admin'], required: true },
   classYear: { 
     type: String, 
-    required: function() {
-      return this.role === 'student';
-    },
-    enum: ['1', '2', '3', '4'] // Academic years
+    required: function() { return this.role === 'student'; }
   },
   semester: { 
     type: String, 
-    required: function() {
-      return this.role === 'student';
-    },
-    enum: ['1', '2', '3', '4', '5', '6', '7', '8'] // Semesters
+    required: function() { return this.role === 'student'; }
   },
-  faceEmbedding: { type: [Number], default: [] },
+  // Replaced faceEmbedding with a reference to the S3 image key
+  faceImageS3Key: { type: String, default: null },
 }, { 
   timestamps: true,
   strict: true
 });
 
-// Pre-save hook to ensure enrollmentNo, classYear, and semester are not set for teachers/admins
-userSchema.pre('save', function(next) {
-  if (this.role === 'teacher' || this.role === 'admin') {
-    // Remove student-specific fields completely for teachers/admins
-    this.enrollmentNo = undefined;
-    this.classYear = undefined;
-    this.semester = undefined;
+// Pre-save hook for password hashing
+userSchema.pre('save', async function(next) {
+  if (!this.isModified('password')) {
+    return next();
   }
+  const salt = await bcrypt.genSalt(10);
+  this.password = await bcrypt.hash(this.password, salt);
   next();
 });
+
+// Method to compare entered password with the hashed password
+userSchema.methods.matchPassword = async function(enteredPassword) {
+  return await bcrypt.compare(enteredPassword, this.password);
+};
+
 
 export const User = mongoose.model('User', userSchema);

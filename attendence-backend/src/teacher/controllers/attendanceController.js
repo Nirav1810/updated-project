@@ -428,14 +428,16 @@ export const getStudentsForClass = async (req, res) => {
       .populate('studentId', 'name email enrollmentNo fullName')
       .sort({ enrolledAt: 1 });
 
-    // Extract student data from enrollments
-    const students = enrollments.map(enrollment => ({
-      _id: enrollment.studentId._id,
-      name: enrollment.studentId.name || enrollment.studentId.fullName,
-      enrollmentNo: enrollment.studentId.enrollmentNo,
-      email: enrollment.studentId.email,
-      enrolledAt: enrollment.enrolledAt
-    }));
+    // Extract student data from enrollments, filtering out null studentId references
+    const students = enrollments
+      .filter(enrollment => enrollment.studentId !== null)
+      .map(enrollment => ({
+        _id: enrollment.studentId._id,
+        name: enrollment.studentId.fullName || enrollment.studentId.name,
+        enrollmentNo: enrollment.studentId.enrollmentNo,
+        email: enrollment.studentId.email,
+        enrolledAt: enrollment.enrolledAt
+      }));
 
     res.status(200).json({
       success: true,
