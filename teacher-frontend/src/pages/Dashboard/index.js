@@ -1,5 +1,5 @@
-import React from 'react';
-import { Link } from 'react-router-dom';
+import React, { useEffect } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { useQuery } from 'react-query';
 import { classService } from '../../services/classService';
 import { attendanceService } from '../../services/attendanceService';
@@ -7,6 +7,14 @@ import { useAuth } from '../../contexts/AuthContext';
 
 const Dashboard = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
+
+  // Redirect admin users to admin dashboard
+  useEffect(() => {
+    if (user && user.role === 'admin') {
+      navigate('/admin');
+    }
+  }, [user, navigate]);
   
   const { data: classes, isLoading: classesLoading } = useQuery(
     'classes',

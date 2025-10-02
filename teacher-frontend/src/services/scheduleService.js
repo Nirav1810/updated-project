@@ -2,11 +2,11 @@ import api from './api';
 
 export const scheduleService = {
   // Basic CRUD operations
-  getSchedules: () => api.get('/api/teacher/schedules'),
-  getScheduleById: (id) => api.get(`/api/teacher/schedules/${id}`),
-  createSchedule: (scheduleData) => api.post('/api/teacher/schedules', scheduleData),
-  updateSchedule: (id, scheduleData) => api.put(`/api/teacher/schedules/${id}`, scheduleData),
-  deleteSchedule: (id) => api.delete(`/api/teacher/schedules/${id}`),
+  getSchedules: () => api.get('/teacher/schedules'),
+  getScheduleById: (id) => api.get(`/teacher/schedules/${id}`),
+  createSchedule: (scheduleData) => api.post('/teacher/schedules', scheduleData),
+  updateSchedule: (id, scheduleData) => api.put(`/teacher/schedules/${id}`, scheduleData),
+  deleteSchedule: (id) => api.delete(`/teacher/schedules/${id}`),
 
   // Enhanced schedule operations
   getTeacherSchedule: (params = {}) => {
@@ -15,10 +15,10 @@ export const scheduleService = {
     if (params.semester) queryParams.append('semester', params.semester);
     if (params.academicYear) queryParams.append('academicYear', params.academicYear);
     
-    return api.get(`/api/teacher/schedules/teacher?${queryParams}`);
+    return api.get(`/teacher/schedules/teacher?${queryParams}`);
   },
 
-  getTodaySchedule: () => api.get('/api/teacher/schedules/today'),
+  getTodaySchedule: () => api.get('/teacher/schedules/today'),
 
   getWeeklySchedule: (params = {}) => {
     const queryParams = new URLSearchParams();
@@ -26,12 +26,12 @@ export const scheduleService = {
     if (params.semester) queryParams.append('semester', params.semester);
     if (params.academicYear) queryParams.append('academicYear', params.academicYear);
     
-    return api.get(`/api/teacher/schedules/weekly?${queryParams}`);
+    return api.get(`/teacher/schedules/weekly?${queryParams}`);
   },
 
-  createBulkSchedules: (schedulesData) => api.post('/api/teacher/schedules/bulk', schedulesData),
+  createBulkSchedules: (schedulesData) => api.post('/teacher/schedules/bulk', schedulesData),
 
-  checkScheduleConflict: (scheduleData) => api.post('/api/teacher/schedules/check-conflict', scheduleData),
+  checkScheduleConflict: (scheduleData) => api.post('/teacher/schedules/check-conflict', scheduleData),
 
   // Time slot utilities
   getTimeSlots: () => {
@@ -71,7 +71,7 @@ export const scheduleService = {
 
   // Merge and split operations
   mergeSchedules: (sourceScheduleId, targetScheduleId, customLabel) => 
-    api.post('/api/teacher/schedules/merge', { 
+    api.post('/teacher/schedules/merge', { 
       sourceScheduleId, 
       targetScheduleId, 
       customLabel 
@@ -79,4 +79,10 @@ export const scheduleService = {
 
   splitSchedule: (scheduleId) => 
     api.post(`/api/teacher/schedules/split/${scheduleId}`),
+};
+
+// Get schedules for a specific teacher (for admin viewing)
+export const getTeacherSchedules = async (teacherId) => {
+  const response = await api.get(`/admin/teachers/${teacherId}/schedules`);
+  return response.data;
 };

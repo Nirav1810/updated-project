@@ -13,6 +13,7 @@ import unifiedAttendanceRoutes from './src/shared/routes/unifiedAttendanceRoutes
 import unifiedUserRoutes from './src/shared/routes/unifiedUserRoutes.js';
 import unifiedTimeSlotRoutes from './src/shared/routes/unifiedTimeSlotRoutes.js';
 import qrRoutes from './src/shared/routes/qrRoutes.js';
+import adminRoutes from './src/shared/routes/adminRoutes.js';
 
 // Import teacher routes
 import teacherAuthRoutes from './src/teacher/routes/authRoutes.js';
@@ -48,6 +49,9 @@ app.post('/test', (req, res) => {
 
 // Use API Routes
 
+// Admin routes
+app.use('/api/admin', adminRoutes);
+
 // Unified routes (for mobile app)
 app.use('/api/auth', unifiedAuthRoutes);
 app.use('/api/classes', unifiedClassRoutes);
@@ -70,6 +74,9 @@ app.use('/api/teacher/timeslots', teacherTimeSlotRoutes);
 app.use('/api/teacher/rooms', teacherRoomRoutes);
 
 console.log('Routes registered:');
+console.log('Admin routes:');
+console.log('- /api/admin');
+
 console.log('Unified routes (for mobile app):');
 console.log('- /api/auth');
 console.log('- /api/classes');

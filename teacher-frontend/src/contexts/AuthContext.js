@@ -32,13 +32,27 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (credentials) => {
     try {
+      console.log('AuthContext: Calling login API...');
       const data = await userService.login(credentials);
-      const { token, ...userData } = data;
+      console.log('AuthContext: API response:', data);
+      
+      // Handle unified auth response format: { token, user: {...} }
+      const token = data.token;
+      const userData = data.user || data; // Support both formats
+      
+      console.log('AuthContext: Extracted token:', token ? 'present' : 'missing');
+      console.log('AuthContext: Extracted user data:', userData);
+      console.log('AuthContext: User role:', userData.role);
+      
       localStorage.setItem('token', token);
       localStorage.setItem('user', JSON.stringify(userData));
       setUser(userData);
-      return { success: true };
+      
+      console.log('AuthContext: Login successful, returning user');
+      return { success: true, user: userData };
     } catch (error) {
+      console.error('AuthContext: Login error:', error);
+      console.error('AuthContext: Error response:', error.response?.data);
       return { 
         success: false, 
         error: error.response?.data?.message || 'Login failed' 

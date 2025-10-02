@@ -11,11 +11,13 @@ const generateToken = (id) => {
 export const registerTeacher = async (req, res) => {
   console.log('Teacher registration request received:', req.body);
   try {
-    const { name, email, password } = req.body;
-    console.log('Extracted teacher data:', { name, email });
+    const { name, fullName, email, password } = req.body;
+    // Use fullName if provided, otherwise use name
+    const teacherName = fullName || name;
+    console.log('Extracted teacher data:', { name: teacherName, email });
 
     // Validate required fields
-    if (!name || !email || !password) {
+    if (!teacherName || !email || !password) {
       return res.status(400).json({ 
         message: 'Name, email, and password are required for teachers' 
       });
@@ -29,15 +31,13 @@ export const registerTeacher = async (req, res) => {
     }
 
     console.log('Creating new teacher...');
-    // Hash password
-    const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash(password, salt);
-
+    // Note: Password will be hashed by pre-save hook in User model
+    
     // Create teacher user data
     const userData = {
-      name,
+      fullName: teacherName,
       email,
-      password: hashedPassword,
+      password, // Will be hashed by pre-save hook
       role: 'teacher'
     };
 
@@ -51,7 +51,8 @@ export const registerTeacher = async (req, res) => {
     if (user) {
       res.status(201).json({
         _id: user._id,
-        name: user.name,
+        name: user.fullName,
+        fullName: user.fullName,
         email: user.email,
         role: user.role,
         token: generateToken(user._id)
@@ -77,7 +78,8 @@ export const loginTeacher = async (req, res) => {
     if (user && (await bcrypt.compare(password, user.password))) {
       res.json({
         _id: user._id,
-        name: user.name,
+        name: user.fullName,
+        fullName: user.fullName,
         email: user.email,
         role: user.role,
         token: generateToken(user._id)
@@ -108,21 +110,24 @@ export const getTeacherProfile = async (req, res) => {
 // Update Teacher Profile
 export const updateTeacherProfile = async (req, res) => {
   try {
-    const { name, email } = req.body;
+    const { name, fullName, email } = req.body;
     const user = await User.findById(req.user.id);
 
     if (!user || user.role !== 'teacher') {
       return res.status(404).json({ message: 'Teacher not found' });
     }
 
-    if (name) user.name = name;
+    // Use fullName if provided, otherwise use name
+    if (fullName) user.fullName = fullName;
+    else if (name) user.fullName = name;
     if (email) user.email = email;
 
     const updatedUser = await user.save();
 
     res.json({
       _id: updatedUser._id,
-      name: updatedUser.name,
+      name: updatedUser.fullName,
+      fullName: updatedUser.fullName,
       email: updatedUser.email,
       role: updatedUser.role,
     });

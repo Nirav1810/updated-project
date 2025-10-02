@@ -17,6 +17,19 @@ import ProfilePage from './pages/Profile';
 import LoginPage from './pages/Login';
 import RegisterPage from './pages/Register';
 
+// Admin Pages
+import AdminDashboard from './pages/Admin/AdminDashboard';
+import StudentManagement from './pages/Admin/StudentManagement';
+import StudentDetails from './pages/Admin/StudentDetails';
+import StudentEdit from './pages/Admin/StudentEdit';
+import TeacherManagement from './pages/Admin/TeacherManagement';
+import TeacherDetails from './pages/Admin/TeacherDetails';
+import TeacherEdit from './pages/Admin/TeacherEdit';
+import ClassManagement from './pages/Admin/ClassManagement';
+import ScheduleManagement from './pages/Admin/ScheduleManagement';
+import AttendanceRecords from './pages/Admin/AttendanceRecords';
+import EnrollmentManagement from './pages/Admin/EnrollmentManagement';
+
 const queryClient = new QueryClient();
 
 function App() {
@@ -41,6 +54,22 @@ function App() {
               <Route path="schedule" element={<SchedulePage />} />
               <Route path="settings" element={<SettingsPage />} />
               <Route path="profile" element={<ProfilePage />} />
+              
+              {/* Admin Routes */}
+              <Route path="admin" element={<AdminDashboard />} />
+              <Route path="admin/students" element={<StudentManagement />} />
+              <Route path="admin/students/:id" element={<StudentDetails />} />
+              <Route path="admin/students/:id/edit" element={<StudentEdit />} />
+              <Route path="admin/teachers" element={<TeacherManagement />} />
+              <Route path="admin/teachers/:id" element={<TeacherDetails />} />
+              <Route path="admin/teachers/:id/edit" element={<TeacherEdit />} />
+              <Route path="admin/classes" element={<ClassManagement />} />
+              <Route path="admin/classes/:id" element={<ClassDetails />} />
+              <Route path="admin/classes/:id/students" element={<ClassStudents />} />
+              <Route path="admin/classes/:id/reports" element={<ClassReports />} />
+              <Route path="admin/schedules" element={<ScheduleManagement />} />
+              <Route path="admin/attendance-records" element={<AttendanceRecords />} />
+              <Route path="admin/enrollments" element={<EnrollmentManagement />} />
             </Route>
           </Routes>
           <Toaster 

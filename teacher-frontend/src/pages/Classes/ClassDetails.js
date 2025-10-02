@@ -1,7 +1,8 @@
 import React from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, Link, useNavigate, useLocation } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from 'react-query';
 import { classService } from '../../services/classService';
+import { getClassById as adminGetClassById } from '../../services/adminService';
 import { toast } from 'react-hot-toast';
 import { useModal } from '../../hooks/useModal';
 import AlertModal from '../../components/common/AlertModal';
@@ -10,12 +11,17 @@ import ConfirmModal from '../../components/common/ConfirmModal';
 const ClassDetails = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const queryClient = useQueryClient();
   const { alertModal, confirmModal, showAlert, showConfirm, closeAlert, closeConfirm } = useModal();
   
+  // Check if we're in admin context
+  const isAdminContext = location.pathname.startsWith('/admin');
+  const basePath = isAdminContext ? '/admin/classes' : '/classes';
+  
   const { data: classData, isLoading, error } = useQuery(
-    ['class', id],
-    () => classService.getClassById(id),
+    ['class', id, isAdminContext ? 'admin' : 'teacher'],
+    () => isAdminContext ? adminGetClassById(id) : classService.getClassById(id),
     {
       enabled: !!id
     }
@@ -26,7 +32,7 @@ const ClassDetails = () => {
     onSuccess: (data) => {
       toast.success(`Class "${data.deletedClass.subjectCode}" deleted successfully!`);
       queryClient.invalidateQueries('classes');
-      navigate('/classes');
+      navigate(basePath);
     },
     onError: (error) => {
       toast.error(error.response?.data?.message || 'Failed to delete class');
@@ -81,7 +87,7 @@ const ClassDetails = () => {
         <ol className="inline-flex items-center space-x-1 md:space-x-3">
           <li className="inline-flex items-center">
             <Link 
-              to="/classes" 
+              to={basePath} 
               className="inline-flex items-center text-sm font-medium text-gray-700 hover:text-blue-600"
             >
               Classes
@@ -132,13 +138,13 @@ const ClassDetails = () => {
           Take Attendance
         </Link>
         <Link
-          to={`/classes/${id}/students`}
+          to={`${basePath}/${id}/students`}
           className="bg-green-500 hover:bg-green-600 text-white font-medium py-3 px-4 rounded-lg text-center transition-colors"
         >
           Manage Students
         </Link>
         <Link
-          to={`/classes/${id}/reports`}
+          to={`${basePath}/${id}/reports`}
           className="bg-purple-500 hover:bg-purple-600 text-white font-medium py-3 px-4 rounded-lg text-center transition-colors"
         >
           View Reports

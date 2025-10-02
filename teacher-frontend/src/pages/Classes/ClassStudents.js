@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useLocation } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from 'react-query';
 import { classService } from '../../services/classService';
+import { getClassById as adminGetClassById } from '../../services/adminService';
 import { userService } from '../../services/userServer';
 import { useModal } from '../../hooks/useModal';
 import AlertModal from '../../components/common/AlertModal';
@@ -9,6 +10,7 @@ import ConfirmModal from '../../components/common/ConfirmModal';
 
 const ClassStudents = () => {
   const { id } = useParams();
+  const location = useLocation();
   const [showAddStudent, setShowAddStudent] = useState(false);
   const [showEnrollModal, setShowEnrollModal] = useState(false);
   const [selectedStudents, setSelectedStudents] = useState([]);
@@ -23,10 +25,14 @@ const ClassStudents = () => {
   const queryClient = useQueryClient();
   const { alertModal, confirmModal, showAlert, showConfirm, closeAlert, closeConfirm } = useModal();
 
+  // Check if we're in admin context
+  const isAdminContext = location.pathname.startsWith('/admin');
+  const basePath = isAdminContext ? '/admin/classes' : '/classes';
+
   // Fetch class details
   const { data: classData, isLoading: classLoading } = useQuery(
-    ['class', id],
-    () => classService.getClassById(id)
+    ['class', id, isAdminContext ? 'admin' : 'teacher'],
+    () => isAdminContext ? adminGetClassById(id) : classService.getClassById(id)
   );
 
   // Fetch enrolled students

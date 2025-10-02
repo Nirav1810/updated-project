@@ -37,7 +37,8 @@ const RegisterPage = () => {
       });
       
       const data = await userService.register({
-        name: formData.name,
+        fullName: formData.name, // Use fullName for consistency with User model
+        name: formData.name, // Also send name for backward compatibility
         email: formData.email,
         password: formData.password,
         role: formData.role
