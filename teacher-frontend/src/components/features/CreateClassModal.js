@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useMutation, useQueryClient, useQuery } from 'react-query';
 import { createClass as adminCreateClass, getAllTeachers } from '../../services/adminService';
 
-const CreateClassModal = ({ onClose, onSuccess }) => {
+const CreateClassModal = ({ onClose, onSuccess, createClassFunction, showTeacherAssignment = true }) => {
   const [formData, setFormData] = useState({
     classNumber: '',
     subjectCode: '',
@@ -16,7 +16,7 @@ const CreateClassModal = ({ onClose, onSuccess }) => {
 
   const queryClient = useQueryClient();
   const { mutate, isLoading } = useMutation(
-    adminCreateClass,
+    createClassFunction || adminCreateClass,
     {
       onSuccess: () => {
         queryClient.invalidateQueries('classes');
@@ -83,10 +83,11 @@ const CreateClassModal = ({ onClose, onSuccess }) => {
     mutate(payload);
   };
 
-  // Fetch teachers for assignment
+  // Fetch teachers for assignment (only for admin context)
   const { data: teachersData } = useQuery('teachers', getAllTeachers, {
     staleTime: 1000 * 60 * 5,
     cacheTime: 1000 * 60 * 10,
+    enabled: showTeacherAssignment, // Only fetch when teacher assignment is shown
   });
   const teachers = teachersData?.teachers || [];
 
@@ -214,24 +215,26 @@ const CreateClassModal = ({ onClose, onSuccess }) => {
               </div>
             </div>
             
-            <div className="mb-4">
-              <label className="block text-gray-700 text-sm font-medium mb-1" htmlFor="teacherId">
-                Assign Teacher (optional)
-              </label>
-              <select
-                id="teacherId"
-                name="teacherId"
-                value={formData.teacherId}
-                onChange={handleChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
-              >
-                <option value="">-- Unassigned --</option>
-                {teachers.map(t => (
-                  <option key={t._id} value={t._id}>{t.name || t.email || `Teacher ${t._id}`}</option>
-                ))}
-              </select>
-              {errors.teacherId && <p className="mt-1 text-sm text-red-600">{errors.teacherId}</p>}
-            </div>
+            {showTeacherAssignment && (
+              <div className="mb-4">
+                <label className="block text-gray-700 text-sm font-medium mb-1" htmlFor="teacherId">
+                  Assign Teacher (optional)
+                </label>
+                <select
+                  id="teacherId"
+                  name="teacherId"
+                  value={formData.teacherId}
+                  onChange={handleChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+                >
+                  <option value="">-- Unassigned --</option>
+                  {teachers.map(t => (
+                    <option key={t._id} value={t._id}>{t.name || t.email || `Teacher ${t._id}`}</option>
+                  ))}
+                </select>
+                {errors.teacherId && <p className="mt-1 text-sm text-red-600">{errors.teacherId}</p>}
+              </div>
+            )}
             <div className="flex justify-end space-x-3">
               <button
                 type="button"

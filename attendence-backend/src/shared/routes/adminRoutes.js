@@ -41,6 +41,7 @@ router.delete('/teachers/:id', adminController.deleteTeacher);
 // ========================= CLASS MANAGEMENT =========================
 router.get('/classes', adminController.getAllClasses);
 router.get('/classes/:id', adminController.getClassById);
+router.post('/classes', adminController.createClass);
 
 // ========================= ATTENDANCE MANAGEMENT =========================
 router.get('/attendance/class/:classId', adminController.getAttendanceRecords);

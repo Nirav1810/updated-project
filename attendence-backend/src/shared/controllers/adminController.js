@@ -1333,6 +1333,86 @@ export const getClassById = async (req, res) => {
   }
 };
 
+// Create a new class (admin)
+export const createClass = async (req, res) => {
+  try {
+    console.log('Admin create class request received:', req.body);
+    
+    // Validate required fields
+    const { classNumber, subjectCode, subjectName, classYear, semester, division } = req.body;
+    
+    if (!classNumber || !subjectCode || !subjectName || !classYear || !semester || !division) {
+      return res.status(400).json({
+        success: false,
+        message: 'All required fields must be provided: classNumber, subjectCode, subjectName, classYear, semester, division'
+      });
+    }
+
+    // Check if class with same details already exists
+    const existingClass = await Class.findOne({
+      classNumber,
+      subjectCode,
+      classYear,
+      semester,
+      division
+    });
+
+    if (existingClass) {
+      return res.status(400).json({
+        success: false,
+        message: 'A class with these details already exists'
+      });
+    }
+
+    // Create the class
+    const classData = {
+      ...req.body,
+      createdBy: req.user.id, // Admin who created the class
+    };
+
+    // If teacherId is provided, validate that the teacher exists and add teacher name
+    if (req.body.teacherId) {
+      const teacher = await User.findById(req.body.teacherId);
+      if (!teacher || teacher.role !== 'teacher') {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid teacher ID provided'
+        });
+      }
+      classData.teacherName = teacher.fullName;
+    } else {
+      // For unassigned classes, remove teacherId and teacherName to avoid validation issues
+      delete classData.teacherId;
+      delete classData.teacherName;
+    }
+
+    const newClass = await Class.create(classData);
+    console.log('Class created successfully by admin:', newClass._id);
+
+    // Populate teacher details for response
+    const populatedClass = await Class.findById(newClass._id)
+      .populate('teacherId', 'fullName email')
+      .lean();
+
+    res.status(201).json({
+      success: true,
+      message: 'Class created successfully',
+      class: {
+        ...populatedClass,
+        teacherName: populatedClass.teacherId?.fullName || populatedClass.teacherName || 'N/A',
+        enrollmentCount: 0
+      }
+    });
+  } catch (error) {
+    console.error('Admin create class error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Error creating class', 
+      error: error.message 
+    });
+  }
+};
+
 // Get attendance records for a class (admin)
 export const getAttendanceRecords = async (req, res) => {
   try {

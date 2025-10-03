@@ -5,12 +5,21 @@ import { User } from '../../shared/models/userModel.js';
 export const createClass = async (req, res) => {
   console.log('Create class request received:', req.body);
   try {
+    // Ensure we have the teacher's full information
+    const teacher = await User.findById(req.user.id).select('fullName email');
+    if (!teacher) {
+      return res.status(404).json({ message: 'Teacher not found' });
+    }
+
     // Add teacher information to the class
     const classData = {
       ...req.body,
       teacherId: req.user.id, // From JWT token
-      teacherName: req.user.name // From JWT token
+      teacherName: teacher.fullName, // From database to ensure we have the correct field
+      createdBy: req.user.id // Track that teacher created this class
     };
+    
+    console.log('Final classData:', classData);
     
     const newClass = await Class.create(classData);
     console.log('Class created successfully:', newClass._id);

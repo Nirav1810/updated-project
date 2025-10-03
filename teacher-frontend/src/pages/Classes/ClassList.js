@@ -53,6 +53,8 @@ const ClassList = () => {
         <CreateClassModal
           onClose={() => setIsModalOpen(false)}
           onSuccess={() => setIsModalOpen(false)}
+          createClassFunction={classService.createClass}
+          showTeacherAssignment={false}
         />
       )}
     </div>
