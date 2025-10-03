@@ -5,6 +5,8 @@ import { getAllClasses, getAttendanceRecords } from '../../services/adminService
 const AttendanceRecords = () => {
   const [classes, setClasses] = useState([]);
   const [attendanceRecords, setAttendanceRecords] = useState([]);
+  const [totalSessions, setTotalSessions] = useState(0);
+  const [totalStudents, setTotalStudents] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [selectedYear, setSelectedYear] = useState('');
@@ -50,6 +52,8 @@ const AttendanceRecords = () => {
       
       const response = await getAttendanceRecords(selectedClass, params);
       setAttendanceRecords(response.records || []);
+      setTotalSessions(response.totalSessions || 0);
+      setTotalStudents(response.totalStudents || 0);
       setError('');
     } catch (err) {
       setError('Failed to fetch attendance records');
@@ -135,24 +139,95 @@ const AttendanceRecords = () => {
   };
 
   const exportToCSV = () => {
-    const headers = ['Student Name', 'Enrollment No', 'Date', 'Status', 'Time'];
-    const rows = filteredRecords.map(r => [
-      r.studentName,
-      r.enrollmentNo,
-      r.date,
-      r.status,
-      r.time
-    ]);
-    
-    const csvContent = [headers, ...rows]
-      .map(row => row.map(cell => `"${cell}"`).join(','))
-      .join('\n');
-    
+    // Helper to escape CSV values
+    const esc = (v) => {
+      if (v === null || v === undefined) return '';
+      const s = typeof v === 'string' ? v : String(v);
+      // double-up quotes then wrap in quotes
+      return '"' + s.replace(/"/g, '""') + '"';
+    };
+
+    // Find selected class details for metadata
+    const cls = classes.find(c => c._id === selectedClass) || {};
+    const subject = cls.subjectCode ? `${cls.subjectCode} - ${cls.subjectName || ''}` : (cls.subjectName || '');
+
+    const metadata = [
+      ['Exported At', new Date().toISOString()],
+      ['Export Type', activeTab === 'summary' ? 'Student Summary' : 'Detailed Records'],
+      ['Class', cls.classNumber || 'N/A'],
+      ['Subject', subject || 'N/A'],
+      ['Academic Year', cls.classYear || 'N/A'],
+      ['Semester', cls.semester || 'N/A'],
+      ['Date From', dateFrom || ''],
+      ['Date To', dateTo || ''],
+      ['Total Sessions (dates)', totalSessions || 'N/A'],
+      ['Total Students', totalStudents || 'N/A'],
+      ['Total Records Exported', filteredRecords.length || 0]
+    ];
+
+    let rows = [];
+
+    if (activeTab === 'summary') {
+      // Summary export: studentSummary
+      const headers = ['Student Name', 'Enrollment No', 'Student ID', 'Total Classes', 'Present', 'Absent', 'Attendance %'];
+      rows.push(headers);
+      studentSummary.forEach(s => {
+        rows.push([
+          s.studentName,
+          s.enrollmentNo,
+          s.studentId || '',
+          s.totalClasses,
+          s.present,
+          s.absent,
+          s.percentage
+        ]);
+      });
+    } else {
+      // Detailed export: include metadata then detailed rows
+      const headers = ['Date', 'Time', 'Student Name', 'Enrollment No', 'Student ID', 'Status'];
+      // Add metadata as top rows (key, value)
+      const csvLines = [];
+      metadata.forEach(m => csvLines.push(m.map(esc).join(',')));
+      csvLines.push(''); // blank line between metadata and table
+      csvLines.push(headers.map(esc).join(','));
+
+      filteredRecords.forEach(r => {
+        csvLines.push([
+          esc(r.date),
+          esc(r.time),
+          esc(r.studentName),
+          esc(r.enrollmentNo),
+          esc(r.studentId || ''),
+          esc(r.status)
+        ].join(','));
+      });
+
+      const csvContent = csvLines.join('\n');
+      const blob = new Blob([csvContent], { type: 'text/csv' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const fileSubject = subject ? subject.replace(/[^a-z0-9\-\_ ]/gi, '') : 'attendance';
+      a.href = url;
+      a.download = `attendance_${fileSubject}_${activeTab}_${dateFrom || 'all'}_to_${dateTo || 'all'}.csv`;
+      a.click();
+      return;
+    }
+
+    // For summary build CSV content
+    const csvContent = [
+      // metadata block
+      ...metadata.map(m => m.map(esc).join(',')),
+      '',
+      // table rows
+      ...rows.map(r => r.map(esc).join(','))
+    ].join('\n');
+
     const blob = new Blob([csvContent], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
+    const fileSubject = subject ? subject.replace(/[^a-z0-9\-\_ ]/gi, '') : 'attendance';
     a.href = url;
-    a.download = `attendance_records_${new Date().toISOString().split('T')[0]}.csv`;
+    a.download = `attendance_summary_${fileSubject}_${dateFrom || 'all'}_to_${dateTo || 'all'}.csv`;
     a.click();
   };
 
