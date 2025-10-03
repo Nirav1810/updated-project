@@ -159,3 +159,12 @@ export const deleteRecurringSchedule = async (scheduleId) => {
   const response = await api.delete(`/admin/recurring-schedules/${scheduleId}`);
   return response.data;
 };
+
+// ========================= CLASS CREATION (ADMIN) =========================
+
+export const createClass = async (data) => {
+  // data expected to include fields like classNumber, subjectCode, subjectName,
+  // classYear, semester, division and optionally teacherId
+  const response = await api.post('/admin/classes', data);
+  return response.data;
+};

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { useMutation, useQueryClient } from 'react-query';
-import { classService } from '../../services/classService';
+import { useMutation, useQueryClient, useQuery } from 'react-query';
+import { createClass as adminCreateClass, getAllTeachers } from '../../services/adminService';
 
 const CreateClassModal = ({ onClose, onSuccess }) => {
   const [formData, setFormData] = useState({
@@ -10,12 +10,13 @@ const CreateClassModal = ({ onClose, onSuccess }) => {
     classYear: '',
     semester: '',
     division: '',
+    teacherId: '',
   });
   const [errors, setErrors] = useState({});
 
   const queryClient = useQueryClient();
   const { mutate, isLoading } = useMutation(
-    classService.createClass,
+    adminCreateClass,
     {
       onSuccess: () => {
         queryClient.invalidateQueries('classes');
@@ -76,8 +77,18 @@ const CreateClassModal = ({ onClose, onSuccess }) => {
   const handleSubmit = (e) => {
     e.preventDefault();
     console.log('Submitting class data:', formData);
-    mutate(formData);
+    // Convert empty teacherId to undefined so backend can accept unassigned
+    const payload = { ...formData };
+    if (!payload.teacherId) delete payload.teacherId;
+    mutate(payload);
   };
+
+  // Fetch teachers for assignment
+  const { data: teachersData } = useQuery('teachers', getAllTeachers, {
+    staleTime: 1000 * 60 * 5,
+    cacheTime: 1000 * 60 * 10,
+  });
+  const teachers = teachersData?.teachers || [];
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
@@ -201,6 +212,25 @@ const CreateClassModal = ({ onClose, onSuccess }) => {
                 />
                 {errors.division && <p className="mt-1 text-sm text-red-600">{errors.division}</p>}
               </div>
+            </div>
+            
+            <div className="mb-4">
+              <label className="block text-gray-700 text-sm font-medium mb-1" htmlFor="teacherId">
+                Assign Teacher (optional)
+              </label>
+              <select
+                id="teacherId"
+                name="teacherId"
+                value={formData.teacherId}
+                onChange={handleChange}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500"
+              >
+                <option value="">-- Unassigned --</option>
+                {teachers.map(t => (
+                  <option key={t._id} value={t._id}>{t.name || t.email || `Teacher ${t._id}`}</option>
+                ))}
+              </select>
+              {errors.teacherId && <p className="mt-1 text-sm text-red-600">{errors.teacherId}</p>}
             </div>
             <div className="flex justify-end space-x-3">
               <button

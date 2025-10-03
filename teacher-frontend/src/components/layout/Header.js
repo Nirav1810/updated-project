@@ -9,7 +9,7 @@ const Header = () => {
     <header className="bg-white shadow">
       <div className="flex items-center justify-between px-6 py-4">
         <div>
-          <h1 className="text-xl font-semibold text-gray-800">Teacher Portal</h1>
+          <h1 className="text-xl font-semibold text-gray-800">{user?.role === 'admin' ? 'Admin Portal' : 'Teacher Portal'}</h1>
         </div>
         <div className="flex items-center space-x-4">
           <button className="p-1 rounded-full text-gray-600 hover:text-gray-900 focus:outline-none">

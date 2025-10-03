@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { getAllClasses } from '../../services/adminService';
+import CreateClassModal from '../../components/features/CreateClassModal';
 
 const ClassManagement = () => {
   const [classes, setClasses] = useState([]);
@@ -11,6 +12,7 @@ const ClassManagement = () => {
   const [sortOrder, setSortOrder] = useState('asc'); // asc or desc
   const [filterSemester, setFilterSemester] = useState('');
   const [filterYear, setFilterYear] = useState('');
+  const [showCreateModal, setShowCreateModal] = useState(false);
 
   useEffect(() => {
     fetchClasses();
@@ -69,6 +71,13 @@ const ClassManagement = () => {
     }
   };
 
+  const openCreateModal = () => setShowCreateModal(true);
+  const closeCreateModal = () => setShowCreateModal(false);
+  const handleCreateSuccess = () => {
+    closeCreateModal();
+    fetchClasses();
+  };
+
   const SortIcon = ({ field }) => {
     if (sortBy !== field) {
       return (
@@ -98,6 +107,14 @@ const ClassManagement = () => {
 
       {/* Filters and Search */}
       <div className="bg-white rounded-lg shadow p-6">
+        <div className="flex justify-end mb-4">
+          <button
+            onClick={openCreateModal}
+            className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+          >
+            Create Class
+          </button>
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           {/* Search */}
           <div className="md:col-span-2">
@@ -269,7 +286,11 @@ const ClassManagement = () => {
             </tbody>
           </table>
         )}
-      </div>
+          </div>
+
+      {showCreateModal && (
+        <CreateClassModal onClose={closeCreateModal} onSuccess={handleCreateSuccess} />
+      )}
     </div>
   );
 };
