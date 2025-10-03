@@ -1644,3 +1644,46 @@ export const createRecurringSchedule = async (req, res) => {
     });
   }
 };
+
+// Delete recurring schedule
+export const deleteRecurringSchedule = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        message: 'Schedule ID is required'
+      });
+    }
+
+    // Find and delete the recurring schedule
+    const deletedSchedule = await RecurringSchedule.findByIdAndDelete(id);
+
+    if (!deletedSchedule) {
+      return res.status(404).json({
+        success: false,
+        message: 'Recurring schedule not found'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Recurring schedule deleted successfully',
+      deletedSchedule: {
+        id: deletedSchedule._id,
+        title: deletedSchedule.title,
+        dayOfWeek: deletedSchedule.dayOfWeek,
+        startTime: deletedSchedule.startTime,
+        endTime: deletedSchedule.endTime
+      }
+    });
+  } catch (error) {
+    console.error('Error deleting recurring schedule:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error deleting recurring schedule',
+      error: error.message
+    });
+  }
+};

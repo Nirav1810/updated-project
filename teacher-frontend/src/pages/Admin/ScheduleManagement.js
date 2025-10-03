@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { 
   getAllSchedules, 
   createSchedule, 
+  deleteSchedule,
   getAllTeachers, 
   getAllClasses, 
   createRecurringSchedule,
@@ -109,6 +110,20 @@ const ScheduleManagement = () => {
       setClasses(response.classes || []);
     } catch (err) {
       console.error('Error fetching classes:', err);
+    }
+  };
+
+  const handleDeleteRegularSchedule = async (scheduleId) => {
+    if (!window.confirm('Are you sure you want to delete this schedule? This action cannot be undone.')) return;
+    
+    try {
+      await deleteSchedule(scheduleId);
+      setSuccess('Schedule deleted successfully');
+      fetchSchedules(); // Refresh the schedules list
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to delete schedule');
+      setTimeout(() => setError(''), 5000);
     }
   };
 
@@ -511,12 +526,21 @@ const ScheduleManagement = () => {
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      <Link
-                        to={`/admin/teachers/${schedule.teacherId?._id}`}
-                        className="text-yellow-600 hover:text-yellow-900"
-                      >
-                        View Teacher
-                      </Link>
+                      <div className="flex items-center space-x-3">
+                        <Link
+                          to={`/admin/teachers/${schedule.teacherId?._id}`}
+                          className="text-yellow-600 hover:text-yellow-900"
+                        >
+                          View Teacher
+                        </Link>
+                        <button
+                          onClick={() => handleDeleteRegularSchedule(schedule._id)}
+                          className="text-red-600 hover:text-red-900 font-medium"
+                          title="Delete Schedule"
+                        >
+                          Delete
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}

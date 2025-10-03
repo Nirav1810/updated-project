@@ -286,8 +286,8 @@ const SchedulePage = () => {
     }
   });
 
-  // Convert API time slots to display format
-  const timeSlots = allTimeSlots.map(slot => ({
+  // Convert API time slots to display format with fallback
+  const timeSlots = allTimeSlots?.length > 0 ? allTimeSlots.map(slot => ({
     id: slot._id,
     start: slot.startTime,
     end: slot.endTime,
@@ -295,9 +295,27 @@ const SchedulePage = () => {
     type: slot.type === 'break' ? 'break' : 'class',
     name: slot.name,
     duration: slot.duration
-  }));
+  })) : [
+    // Fallback time slots if API doesn't return any
+    { id: 'slot-1', start: '09:00', end: '10:00', label: '09:00-10:00', type: 'class', name: 'Period 1' },
+    { id: 'slot-2', start: '10:00', end: '11:00', label: '10:00-11:00', type: 'class', name: 'Period 2' },
+    { id: 'break-1', start: '11:00', end: '11:15', label: '11:00-11:15 (Break)', type: 'break', name: 'Refreshment Break', duration: 15 },
+    { id: 'slot-3', start: '11:15', end: '12:15', label: '11:15-12:15', type: 'class', name: 'Period 3' },
+    { id: 'slot-4', start: '12:15', end: '13:15', label: '12:15-13:15', type: 'class', name: 'Period 4' },
+    { id: 'break-2', start: '13:15', end: '14:00', label: '13:15-14:00 (Lunch)', type: 'break', name: 'Lunch Break', duration: 45 },
+    { id: 'slot-5', start: '14:00', end: '15:00', label: '14:00-15:00', type: 'class', name: 'Period 5' },
+    { id: 'slot-6', start: '15:00', end: '16:00', label: '15:00-16:00', type: 'class', name: 'Period 6' },
+    { id: 'slot-7', start: '16:15', end: '17:15', label: '16:15-17:15', type: 'class', name: 'Period 7' }
+  ];
 
-  const daysOfWeek = scheduleService.getDaysOfWeek();
+  const daysOfWeek = scheduleService.getDaysOfWeek() || [
+    { id: 'Monday', label: 'Monday', short: 'Mon' },
+    { id: 'Tuesday', label: 'Tuesday', short: 'Tue' },
+    { id: 'Wednesday', label: 'Wednesday', short: 'Wed' },
+    { id: 'Thursday', label: 'Thursday', short: 'Thu' },
+    { id: 'Friday', label: 'Friday', short: 'Fri' },
+    { id: 'Saturday', label: 'Saturday', short: 'Sat' }
+  ];
 
   // Helper functions for predefined options  
   const getAvailableRooms = () => [
@@ -542,7 +560,8 @@ const SchedulePage = () => {
     ];
   };
 
-  if (isLoading || timeSlotsLoading || allTimeSlotsLoading) {
+  // Only show loading when critical data is loading
+  if ((isLoading && !timeSlots.length) || allTimeSlotsLoading) {
     return (
       <div className="flex justify-center items-center h-64">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
@@ -563,6 +582,8 @@ const SchedulePage = () => {
       </div>
     );
   }
+
+
 
   return (
     <div className="p-6">
@@ -646,6 +667,8 @@ const SchedulePage = () => {
       {/* Tab Content */}
       {activeTab === 'weekly' && (
         <>
+
+
           {/* Timetable Grid */}
           <DragDropContext onDragEnd={handleDragEnd}>
         <div className="bg-white rounded-lg shadow overflow-hidden">
@@ -664,7 +687,7 @@ const SchedulePage = () => {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {timeSlots.map((timeSlot) => (
+                {timeSlots && timeSlots.length > 0 ? timeSlots.map((timeSlot) => (
                   <tr key={timeSlot.id} className={`hover:bg-gray-50 ${timeSlot.type === 'break' ? 'bg-gray-100' : ''}`}>
                     <td className={`px-4 py-6 whitespace-nowrap text-sm font-medium ${timeSlot.type === 'break' ? 'text-gray-600 bg-gray-200' : 'text-gray-900 bg-gray-50'}`}>
                       {timeSlot.label}
@@ -675,12 +698,12 @@ const SchedulePage = () => {
                         <div className="bg-orange-50 border border-orange-200 rounded-lg p-3 h-20 flex items-center justify-center">
                           <div className="text-center">
                             <div className="text-sm font-semibold text-orange-800">
-                              {timeSlot.name.includes('Break') ? `🧘 ${timeSlot.name}` : `🍽️ ${timeSlot.name}`}
+                              {timeSlot.name && timeSlot.name.includes('Break') ? `🧘 ${timeSlot.name}` : `🍽️ ${timeSlot.name || 'Break'}`}
                             </div>
                             <div className="text-xs text-orange-600">
-                              {timeSlot.duration} minutes
+                              {timeSlot.duration || 15} minutes
                             </div>
-                            {timeSlot.name.includes('Refreshment') && (
+                            {timeSlot.name && timeSlot.name.includes('Refreshment') && (
                               <div className="text-xs text-orange-500 mt-1">
                                 Time to freshen up
                               </div>
@@ -792,7 +815,13 @@ const SchedulePage = () => {
                       })
                     )}
                   </tr>
-                ))}
+                )) : (
+                  <tr>
+                    <td colSpan={daysOfWeek.length + 1} className="px-4 py-8 text-center text-gray-500">
+                      No time slots available. Loading...
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>

@@ -62,5 +62,6 @@ router.delete('/schedules/:id', adminController.deleteSchedule);
 // ========================= RECURRING SCHEDULE MANAGEMENT =========================
 router.get('/recurring-schedules', adminController.getAllRecurringSchedules);
 router.post('/recurring-schedules', adminController.createRecurringSchedule);
+router.delete('/recurring-schedules/:id', adminController.deleteRecurringSchedule);
 
 export default router;
